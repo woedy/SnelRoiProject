@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
-import { LanguageSwitch } from '@/components/LanguageSwitch';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
@@ -17,7 +16,6 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronRight,
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -47,38 +45,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     navigate('/');
   };
 
-  // Allow demo continuation
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="text-center max-w-md">
-          <div className="mb-6">
-            <Logo size="lg" />
-          </div>
-          <h2 className="text-2xl font-display font-bold mb-4">Demo Mode</h2>
-          <p className="text-muted-foreground mb-6">
-            You're not logged in. Would you like to continue with the demo?
-          </p>
-          <div className="space-y-3">
-            <Button className="w-full" onClick={() => navigate('/login')}>
-              {t('nav.login')}
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                // Quick demo login
-                localStorage.setItem('snel-roi-auth', 'true');
-                window.location.reload();
-              }}
-            >
-              Continue Demo
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
+    return <Navigate to="/login" replace />;
   }
 
   return (

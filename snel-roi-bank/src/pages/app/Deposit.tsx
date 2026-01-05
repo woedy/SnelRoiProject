@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Receipt } from '@/components/Receipt';
-import { generateReferenceNumber } from '@/data/demoData';
+import { apiRequest } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 import { Building2, CreditCard, Smartphone, ChevronRight, ArrowLeft } from 'lucide-react';
 
 const Deposit = () => {
@@ -14,7 +15,7 @@ const Deposit = () => {
   const [step, setStep] = useState<'method' | 'amount' | 'success'>('method');
   const [method, setMethod] = useState<string>('');
   const [amount, setAmount] = useState('');
-  const [reference] = useState(generateReferenceNumber());
+  const [reference, setReference] = useState('');
 
   const methods = [
     { id: 'bank', icon: Building2, label: t('deposit.bankTransfer'), desc: '1-2 business days' },
@@ -27,8 +28,21 @@ const Deposit = () => {
     setStep('amount');
   };
 
-  const handleConfirm = () => {
-    setStep('success');
+  const handleConfirm = async () => {
+    try {
+      const response = await apiRequest<{ reference: string }>(`/deposits`, {
+        method: 'POST',
+        body: JSON.stringify({ amount, memo: method }),
+      });
+      setReference(response.reference);
+      setStep('success');
+    } catch (error) {
+      toast({
+        title: t('common.error'),
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    }
   };
 
   if (step === 'success') {
@@ -47,7 +61,6 @@ const Deposit = () => {
 
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-0">
-      {/* Header */}
       <div className="mb-8">
         <Button
           variant="ghost"
@@ -111,7 +124,7 @@ const Deposit = () => {
               <Label htmlFor="amount">{t('common.amount')}</Label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-semibold text-muted-foreground">
-                  $
+                  ₵
                 </span>
                 <Input
                   id="amount"
@@ -131,7 +144,7 @@ const Deposit = () => {
                     size="sm"
                     onClick={() => setAmount(preset.toString())}
                   >
-                    ${preset}
+                    ₵{preset}
                   </Button>
                 ))}
               </div>

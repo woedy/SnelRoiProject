@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
@@ -6,8 +6,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Receipt } from '@/components/Receipt';
-import { generateReferenceNumber, demoBeneficiaries } from '@/data/demoData';
+import { apiRequest } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 import { UserPlus, ChevronRight, ArrowLeft, Check } from 'lucide-react';
+
+interface Beneficiary {
+  id: number;
+  name: string;
+  bank_label: string;
+  account_number: string;
+}
 
 const Transfer = () => {
   const { t } = useLanguage();
@@ -15,9 +23,14 @@ const Transfer = () => {
   const [step, setStep] = useState<'recipient' | 'amount' | 'success'>('recipient');
   const [selectedBeneficiary, setSelectedBeneficiary] = useState<string | null>(null);
   const [newRecipient, setNewRecipient] = useState({ name: '', account: '' });
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [reference] = useState(generateReferenceNumber());
+  const [reference, setReference] = useState('');
+
+  useEffect(() => {
+    apiRequest<Beneficiary[]>('/beneficiaries').then(setBeneficiaries).catch(() => setBeneficiaries([]));
+  }, []);
 
   const handleBeneficiarySelect = (id: string) => {
     setSelectedBeneficiary(id);
@@ -29,15 +42,34 @@ const Transfer = () => {
     setStep('amount');
   };
 
-  const handleConfirm = () => {
-    setStep('success');
+  const handleConfirm = async () => {
+    try {
+      const targetAccount = selectedBeneficiary === 'new'
+        ? newRecipient.account
+        : beneficiaries.find((b) => b.id.toString() === selectedBeneficiary)?.account_number;
+      if (!targetAccount) {
+        throw new Error('Recipient account is required');
+      }
+      const response = await apiRequest<{ reference: string }>(`/transfers`, {
+        method: 'POST',
+        body: JSON.stringify({ amount, memo: note, target_account_number: targetAccount }),
+      });
+      setReference(response.reference);
+      setStep('success');
+    } catch (error) {
+      toast({
+        title: t('common.error'),
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const getRecipientName = () => {
     if (selectedBeneficiary === 'new') {
       return newRecipient.name || 'New Recipient';
     }
-    return demoBeneficiaries.find(b => b.id === selectedBeneficiary)?.name || '';
+    return beneficiaries.find(b => b.id.toString() === selectedBeneficiary)?.name || '';
   };
 
   if (step === 'success') {
@@ -56,7 +88,6 @@ const Transfer = () => {
 
   return (
     <div className="max-w-2xl mx-auto pb-20 lg:pb-0">
-      {/* Header */}
       <div className="mb-8">
         <Button
           variant="ghost"
@@ -82,18 +113,18 @@ const Transfer = () => {
               {t('transfer.savedBeneficiaries')}
             </h3>
             <div className="space-y-2">
-              {demoBeneficiaries.map((beneficiary) => (
+              {beneficiaries.map((beneficiary) => (
                 <button
                   key={beneficiary.id}
-                  onClick={() => handleBeneficiarySelect(beneficiary.id)}
+                  onClick={() => handleBeneficiarySelect(beneficiary.id.toString())}
                   className="w-full flex items-center gap-4 p-4 rounded-xl bg-card shadow-card hover:shadow-lg transition-all hover:-translate-y-0.5"
                 >
                   <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
-                    {beneficiary.avatar}
+                    {beneficiary.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="text-left flex-1">
                     <p className="font-semibold text-foreground">{beneficiary.name}</p>
-                    <p className="text-sm text-muted-foreground">{beneficiary.bank}</p>
+                    <p className="text-sm text-muted-foreground">{beneficiary.bank_label}</p>
                   </div>
                   <ChevronRight className="h-5 w-5 text-muted-foreground" />
                 </button>
@@ -128,20 +159,19 @@ const Transfer = () => {
 
       {step === 'amount' && (
         <div className="space-y-6 animate-slide-up">
-          {/* Selected Recipient */}
           <div className="bg-card rounded-2xl p-4 shadow-card">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
                 {selectedBeneficiary === 'new'
                   ? newRecipient.name.slice(0, 2).toUpperCase() || 'NR'
-                  : demoBeneficiaries.find(b => b.id === selectedBeneficiary)?.avatar}
+                  : beneficiaries.find(b => b.id.toString() === selectedBeneficiary)?.name.slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-foreground">{getRecipientName()}</p>
                 <p className="text-sm text-muted-foreground">
                   {selectedBeneficiary === 'new'
                     ? 'New recipient'
-                    : demoBeneficiaries.find(b => b.id === selectedBeneficiary)?.bank}
+                    : beneficiaries.find(b => b.id.toString() === selectedBeneficiary)?.bank_label}
                 </p>
               </div>
               <div className="w-6 h-6 rounded-full bg-success flex items-center justify-center">
@@ -150,7 +180,6 @@ const Transfer = () => {
             </div>
           </div>
 
-          {/* New Recipient Fields */}
           {selectedBeneficiary === 'new' && (
             <div className="bg-card rounded-2xl p-6 shadow-card space-y-4">
               <div className="space-y-2">
@@ -164,10 +193,10 @@ const Transfer = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="recipientAccount">Account Number / IBAN</Label>
+                <Label htmlFor="recipientAccount">Account Number</Label>
                 <Input
                   id="recipientAccount"
-                  placeholder="DE89 3704 0044 0532 XXXX XX"
+                  placeholder="ACCT-000001"
                   value={newRecipient.account}
                   onChange={(e) => setNewRecipient({ ...newRecipient, account: e.target.value })}
                   className="h-12"
@@ -176,13 +205,12 @@ const Transfer = () => {
             </div>
           )}
 
-          {/* Amount */}
           <div className="bg-card rounded-2xl p-6 shadow-card">
             <div className="space-y-4">
               <Label htmlFor="amount">{t('common.amount')}</Label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-semibold text-muted-foreground">
-                  $
+                  ₵
                 </span>
                 <Input
                   id="amount"
@@ -202,23 +230,21 @@ const Transfer = () => {
                     size="sm"
                     onClick={() => setAmount(preset.toString())}
                   >
-                    ${preset}
+                    ₵{preset}
                   </Button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Note */}
           <div className="bg-card rounded-2xl p-6 shadow-card">
             <Label htmlFor="note">{t('transfer.note')}</Label>
             <Textarea
               id="note"
-              placeholder="Add a note for the recipient..."
+              placeholder={t('transfer.notePlaceholder')}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="mt-2 resize-none"
-              rows={3}
+              className="mt-2"
             />
           </div>
 

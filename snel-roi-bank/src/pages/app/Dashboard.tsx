@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { demoAccounts, demoTransactions, demoVirtualCards } from '@/data/demoData';
 import { TransactionIcon } from '@/components/TransactionIcon';
 import { StatusBadge } from '@/components/StatusBadge';
+import { apiRequest } from '@/lib/api';
 import {
   ArrowDownToLine,
   Send,
@@ -16,19 +16,52 @@ import {
   CreditCard,
   Eye,
   EyeOff,
-  Copy,
   Snowflake,
 } from 'lucide-react';
+
+interface Account {
+  id: number;
+  type: string;
+  currency: string;
+  status: string;
+  account_number: string;
+  balance: number;
+}
+
+interface Transaction {
+  id: number;
+  reference: string;
+  entry_type: string;
+  created_at: string;
+  status: string;
+  memo: string;
+}
+
+interface DashboardData {
+  accounts: Account[];
+  recent_transactions: Transaction[];
+  total_balance: number;
+  insights: { debits_last_30_days: number; credits_last_30_days: number };
+  virtual_card: { status: string; last_four: string };
+}
 
 const Dashboard = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const totalBalance = demoAccounts.reduce((sum, acc) => sum + acc.balance, 0);
-  const totalAvailable = demoAccounts.reduce((sum, acc) => sum + acc.availableBalance, 0);
+  useEffect(() => {
+    apiRequest<DashboardData>('/dashboard')
+      .then(setDashboard)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalBalance = dashboard?.total_balance ?? 0;
+  const totalAvailable = dashboard?.total_balance ?? 0;
   const pendingAmount = totalBalance - totalAvailable;
 
-  const recentTransactions = demoTransactions.slice(0, 5);
+  const recentTransactions = dashboard?.recent_transactions ?? [];
 
   const quickActions = [
     { icon: ArrowDownToLine, label: t('nav.deposit'), path: '/app/deposit', color: 'bg-success/10 text-success' },
@@ -37,14 +70,19 @@ const Dashboard = () => {
   ];
 
   const accountTypeLabels: Record<string, string> = {
-    checking: t('dashboard.checking'),
-    savings: t('dashboard.savings'),
-    business: t('dashboard.business'),
+    CHECKING: t('dashboard.checking'),
+    SAVINGS: t('dashboard.savings'),
+    SYSTEM: t('dashboard.business'),
   };
 
-  const primaryVirtualCard = demoVirtualCards[0];
   const [showCardDetails, setShowCardDetails] = React.useState(false);
-  const [isFrozen, setIsFrozen] = React.useState(primaryVirtualCard?.status === 'frozen');
+  const [isFrozen, setIsFrozen] = React.useState(false);
+
+  useEffect(() => {
+    if (dashboard?.virtual_card) {
+      setIsFrozen(dashboard.virtual_card.status === 'FROZEN');
+    }
+  }, [dashboard]);
 
   const maskedPan = (pan: string) => {
     const digits = pan.replace(/\s/g, '');
@@ -52,25 +90,25 @@ const Dashboard = () => {
     return `•••• •••• •••• ${last4}`;
   };
 
+  if (loading) {
+    return <p className="text-muted-foreground">Loading dashboard...</p>;
+  }
+
   return (
     <div className="space-y-6 lg:space-y-8 pb-20 lg:pb-0">
-      {/* Welcome Header */}
       <div>
         <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">
-          {t('dashboard.welcome')}, {user?.name.split(' ')[0]}! 👋
+          {t('dashboard.welcome')}, {user?.username.split('@')[0]}! 👋
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Here's what's happening with your accounts today.
-        </p>
+        <p className="text-muted-foreground mt-1">Here's what's happening with your accounts today.</p>
       </div>
 
-      {/* Balance Overview */}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="md:col-span-2 banking-card text-primary-foreground">
           <div className="relative z-10">
             <p className="text-sm opacity-70 mb-1">{t('dashboard.totalBalance')}</p>
             <p className="text-4xl lg:text-5xl font-bold mb-6">
-              ${totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₵{Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </p>
             <div className="flex gap-8">
               <div>
@@ -79,7 +117,7 @@ const Dashboard = () => {
                   {t('dashboard.available')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ${totalAvailable.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ₵{Number(totalAvailable).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div>
@@ -88,23 +126,19 @@ const Dashboard = () => {
                   {t('dashboard.pending')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ${pendingAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ₵{Number(pendingAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="bg-card rounded-2xl p-6 shadow-card">
           <h3 className="font-semibold text-foreground mb-4">{t('dashboard.quickActions')}</h3>
           <div className="space-y-3">
             {quickActions.map((action, index) => (
               <Link key={index} to={action.path}>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start h-auto py-3 hover:bg-secondary"
-                >
+                <Button variant="ghost" className="w-full justify-start h-auto py-3 hover:bg-secondary">
                   <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center mr-3`}>
                     <action.icon className="h-5 w-5" />
                   </div>
@@ -117,13 +151,11 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Accounts & Insights */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Accounts */}
         <div className="bg-card rounded-2xl p-6 shadow-card">
           <h3 className="font-semibold text-foreground mb-4">{t('dashboard.accounts')}</h3>
           <div className="space-y-3">
-            {demoAccounts.map((account) => (
+            {dashboard?.accounts.map((account) => (
               <div
                 key={account.id}
                 className="flex items-center justify-between p-4 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors"
@@ -133,196 +165,116 @@ const Dashboard = () => {
                     <CreditCard className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">{accountTypeLabels[account.type]}</p>
+                    <p className="font-medium text-foreground">
+                      {accountTypeLabels[account.type] || account.type}
+                    </p>
                     <p className="text-xs text-muted-foreground font-mono">
-                      {account.accountNumber.slice(-8)}
+                      {account.account_number.slice(-8)}
                     </p>
                   </div>
                 </div>
                 <p className="font-semibold text-foreground">
-                  ${account.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ₵{Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Virtual Card */}
         <div className="bg-card rounded-2xl p-6 shadow-card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-foreground">{t('dashboard.virtualCard')}</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowCardDetails((v) => !v)}
-            >
+            <Button variant="ghost" size="sm" onClick={() => setShowCardDetails((v) => !v)}>
               {showCardDetails ? t('dashboard.virtualCardHide') : t('dashboard.virtualCardReveal')}
-              {showCardDetails ? (
-                <EyeOff className="h-4 w-4 ml-2" />
-              ) : (
-                <Eye className="h-4 w-4 ml-2" />
-              )}
+              {showCardDetails ? <EyeOff className="h-4 w-4 ml-2" /> : <Eye className="h-4 w-4 ml-2" />}
             </Button>
           </div>
 
-          {primaryVirtualCard ? (
+          {dashboard?.virtual_card ? (
             <div className="space-y-4">
               <div className={`rounded-2xl p-5 text-primary-foreground banking-card ${isFrozen ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm opacity-70">{primaryVirtualCard.nickname}</p>
+                    <p className="text-sm opacity-70">Primary</p>
                     <p className="mt-1 text-xl font-semibold tracking-wide">
-                      {showCardDetails ? primaryVirtualCard.pan : maskedPan(primaryVirtualCard.pan)}
+                      {showCardDetails ? `**** **** **** ${dashboard.virtual_card.last_four}` : maskedPan(`0000 0000 0000 ${dashboard.virtual_card.last_four}`)}
                     </p>
                   </div>
-                  <div className="text-sm font-semibold opacity-80">{primaryVirtualCard.brand}</div>
+                  <div className="text-sm font-semibold opacity-80">VISA</div>
                 </div>
 
                 <div className="mt-6 grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs opacity-70">{t('dashboard.virtualCardDetails')}</p>
-                    <p className="text-sm font-medium mt-1">
-                      {showCardDetails ? primaryVirtualCard.cvv : '•••'} • {primaryVirtualCard.expiryMonth}/{primaryVirtualCard.expiryYear}
-                    </p>
+                    <p className="text-sm font-medium mt-1">{showCardDetails ? '***' : '•••'} • 12/28</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs opacity-70">{primaryVirtualCard.cardholderName}</p>
+                    <p className="text-xs opacity-70">{user?.username}</p>
                     <p className="text-sm font-medium mt-1">
-                      {primaryVirtualCard.currency} {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
+                      GHS {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-                <Button
-                  variant="secondary"
-                  className="h-11"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(primaryVirtualCard.pan);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  {t('dashboard.virtualCardCopyNumber')}
+                <Button variant="secondary" className="h-11" onClick={() => setShowCardDetails((v) => !v)}>
+                  {showCardDetails ? t('dashboard.virtualCardHide') : t('dashboard.virtualCardReveal')}
                 </Button>
-
-                <Button
-                  variant="secondary"
-                  className="h-11"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(primaryVirtualCard.cvv);
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                  disabled={!showCardDetails}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  {t('dashboard.virtualCardCopyCvv')}
-                </Button>
-
-                <Button
-                  variant={isFrozen ? 'default' : 'destructive'}
-                  className="h-11"
-                  onClick={() => setIsFrozen((v) => !v)}
-                >
+                <Button variant="secondary" className="h-11" onClick={() => setIsFrozen((v) => !v)}>
                   <Snowflake className="h-4 w-4 mr-2" />
                   {isFrozen ? t('dashboard.virtualCardUnfreeze') : t('dashboard.virtualCardFreeze')}
                 </Button>
-              </div>
-
-              <div className="space-y-3">
-                {(() => {
-                  const spent = primaryVirtualCard.spentThisMonth;
-                  const limit = primaryVirtualCard.monthlyLimit;
-                  const remaining = Math.max(0, limit - spent);
-                  const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
-
-                  return (
-                    <>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{t('dashboard.virtualCardMonthlyLimit')}</span>
-                        <span className="text-foreground font-medium">
-                          ${limit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{t('dashboard.virtualCardSpentThisMonth')}</span>
-                        <span className="text-foreground font-medium">
-                          ${spent.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{t('dashboard.virtualCardRemaining')}</span>
-                        <span className="text-foreground font-medium">
-                          ${remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-
-                      <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500 bg-primary"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </>
-                  );
-                })()}
+                <Button variant="secondary" className="h-11">
+                  {t('dashboard.virtualCardCopy')}
+                </Button>
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-xl bg-secondary/50 text-muted-foreground">
-              {t('dashboard.virtualCardEmpty')}
-            </div>
+            <p className="text-sm text-muted-foreground">No virtual card data yet.</p>
           )}
         </div>
       </div>
 
-      {/* Recent Transactions */}
-      <div className="bg-card rounded-2xl p-6 shadow-card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-foreground">{t('dashboard.recentTransactions')}</h3>
-          <Link to="/app/transactions">
-            <Button variant="ghost" size="sm">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="bg-card rounded-2xl p-6 shadow-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground">{t('dashboard.recentTransactions')}</h3>
+            <Link to="/app/transactions" className="text-sm text-accent hover:underline">
               {t('dashboard.viewAll')}
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </Link>
-        </div>
-
-        <div className="space-y-3">
-          {recentTransactions.map((transaction) => (
-            <div
-              key={transaction.id}
-              className="flex items-center justify-between p-3 rounded-xl hover:bg-secondary/50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <TransactionIcon type={transaction.type} />
-                <div>
-                  <p className="font-medium text-foreground">{transaction.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(transaction.date).toLocaleDateString('en-US')}
-                  </p>
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {recentTransactions.map((transaction) => (
+              <div key={transaction.id} className="flex items-center justify-between p-3 rounded-xl bg-secondary/40">
+                <div className="flex items-center gap-3">
+                  <TransactionIcon type={transaction.entry_type} />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{transaction.entry_type}</p>
+                    <p className="text-xs text-muted-foreground">{transaction.reference}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold">{transaction.memo || '—'}</p>
+                  <StatusBadge status={transaction.status} />
                 </div>
               </div>
-              <div className="text-right">
-                <p
-                  className={`font-semibold ${
-                    transaction.amount > 0 ? 'text-success' : 'text-foreground'
-                  }`}
-                >
-                  {transaction.amount > 0 ? '+' : ''}$
-                  {Math.abs(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
-                <StatusBadge status={transaction.status} />
-              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl p-6 shadow-card">
+          <h3 className="font-semibold text-foreground mb-4">{t('dashboard.insights')}</h3>
+          <div className="grid gap-3">
+            <div className="rounded-xl bg-secondary/40 p-4">
+              <p className="text-xs text-muted-foreground">Credits last 30 days</p>
+              <p className="text-lg font-semibold">₵{Number(dashboard?.insights.credits_last_30_days ?? 0).toFixed(2)}</p>
             </div>
-          ))}
+            <div className="rounded-xl bg-secondary/40 p-4">
+              <p className="text-xs text-muted-foreground">Debits last 30 days</p>
+              <p className="text-lg font-semibold">₵{Number(dashboard?.insights.debits_last_30_days ?? 0).toFixed(2)}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

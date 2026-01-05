@@ -28,11 +28,12 @@ export const TransactionIcon: React.FC<TransactionIconProps> = ({ type, size = '
   };
 
   const getIconConfig = () => {
-    switch (type) {
+    switch (type.toLowerCase()) {
       case 'deposit':
       case 'salary':
         return { icon: ArrowDownLeft, bg: 'bg-success/10', color: 'text-success' };
       case 'transfer':
+      case 'withdrawal':
       case 'withdraw':
         return { icon: ArrowUpRight, bg: 'bg-info/10', color: 'text-info' };
       case 'payment':

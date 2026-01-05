@@ -1,44 +1,54 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
-import { demoTransactions } from '@/data/demoData';
 import { TransactionIcon } from '@/components/TransactionIcon';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { apiRequest } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Filter, X } from 'lucide-react';
+import { Search } from 'lucide-react';
+
+interface Transaction {
+  id: number;
+  reference: string;
+  entry_type: string;
+  created_at: string;
+  status: string;
+  memo: string;
+}
 
 const Transactions = () => {
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTransaction, setSelectedTransaction] = useState<typeof demoTransactions[0] | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  const filteredTransactions = demoTransactions.filter((transaction) => {
-    const matchesSearch = transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transaction.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
+  useEffect(() => {
+    apiRequest<Transaction[]>('/transactions').then(setTransactions);
+  }, []);
+
+  const filteredTransactions = transactions.filter((transaction) => {
+    const matchesSearch = transaction.memo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.entry_type.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || transaction.status.toLowerCase() === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   return (
     <div className="max-w-4xl mx-auto pb-20 lg:pb-0">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">
           {t('nav.transactions')}
         </h1>
-        <p className="text-muted-foreground mt-1">
-          View all your account activity
-        </p>
+        <p className="text-muted-foreground mt-1">View all your account activity</p>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -50,7 +60,7 @@ const Transactions = () => {
           />
         </div>
         <div className="flex gap-2">
-          {['all', 'completed', 'pending', 'failed'].map((status) => (
+          {['all', 'pending', 'posted', 'declined'].map((status) => (
             <Button
               key={status}
               variant={statusFilter === status ? 'default' : 'secondary'}
@@ -58,13 +68,12 @@ const Transactions = () => {
               onClick={() => setStatusFilter(status)}
               className="capitalize"
             >
-              {status === 'all' ? 'All' : t(`transaction.${status}`)}
+              {status === 'all' ? 'All' : status}
             </Button>
           ))}
         </div>
       </div>
 
-      {/* Transactions List */}
       <div className="bg-card rounded-2xl shadow-card overflow-hidden">
         {filteredTransactions.length === 0 ? (
           <div className="p-12 text-center">
@@ -79,28 +88,21 @@ const Transactions = () => {
                 className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-left"
               >
                 <div className="flex items-center gap-4">
-                  <TransactionIcon type={transaction.type} />
+                  <TransactionIcon type={transaction.entry_type} />
                   <div>
-                    <p className="font-medium text-foreground">{transaction.description}</p>
+                    <p className="font-medium text-foreground">{transaction.entry_type}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        {new Date(transaction.date).toLocaleDateString('de-DE')}
+                        {new Date(transaction.created_at).toLocaleDateString('de-DE')}
                       </span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                        {transaction.category}
+                        {transaction.reference}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p
-                    className={`font-semibold ${
-                      transaction.amount > 0 ? 'text-success' : 'text-foreground'
-                    }`}
-                  >
-                    {transaction.amount > 0 ? '+' : ''}$
-                    {Math.abs(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </p>
+                  <p className="font-semibold">{transaction.memo || '—'}</p>
                   <div className="mt-1">
                     <StatusBadge status={transaction.status} />
                   </div>
@@ -111,7 +113,6 @@ const Transactions = () => {
         )}
       </div>
 
-      {/* Transaction Detail Modal */}
       <Dialog open={!!selectedTransaction} onOpenChange={() => setSelectedTransaction(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -121,29 +122,18 @@ const Transactions = () => {
           {selectedTransaction && (
             <div className="space-y-6">
               <div className="flex items-center gap-4">
-                <TransactionIcon type={selectedTransaction.type} size="lg" />
+                <TransactionIcon type={selectedTransaction.entry_type} size="lg" />
                 <div>
-                  <p className="font-semibold text-lg">{selectedTransaction.description}</p>
+                  <p className="font-semibold text-lg">{selectedTransaction.entry_type}</p>
                   <StatusBadge status={selectedTransaction.status} />
                 </div>
-              </div>
-
-              <div className="text-center py-4">
-                <p
-                  className={`text-4xl font-bold ${
-                    selectedTransaction.amount > 0 ? 'text-success' : 'text-foreground'
-                  }`}
-                >
-                  {selectedTransaction.amount > 0 ? '+' : ''}$
-                  {Math.abs(selectedTransaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </p>
               </div>
 
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">{t('common.date')}</span>
                   <span className="font-medium">
-                    {new Date(selectedTransaction.date).toLocaleDateString('en-US', {
+                    {new Date(selectedTransaction.created_at).toLocaleDateString('en-US', {
                       weekday: 'long',
                       year: 'numeric',
                       month: 'long',
@@ -152,16 +142,12 @@ const Transactions = () => {
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">Category</span>
-                  <span className="font-medium">{selectedTransaction.category}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Type</span>
-                  <span className="font-medium capitalize">{selectedTransaction.type}</span>
+                  <span className="font-medium capitalize">{selectedTransaction.entry_type}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-muted-foreground">Reference</span>
-                  <span className="font-mono text-xs">{selectedTransaction.id.toUpperCase()}</span>
+                  <span className="font-mono text-xs">{selectedTransaction.reference}</span>
                 </div>
               </div>
             </div>

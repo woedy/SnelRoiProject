@@ -18,14 +18,22 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login();
-    toast({
-      title: t('common.success'),
-      description: t('login.welcomeBack'),
-    });
-    navigate('/app/dashboard');
+    try {
+      await login(email, password);
+      toast({
+        title: t('common.success'),
+        description: t('login.welcomeBack'),
+      });
+      navigate('/app/dashboard');
+    } catch (error) {
+      toast({
+        title: t('common.error'),
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
