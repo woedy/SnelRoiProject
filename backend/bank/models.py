@@ -41,7 +41,7 @@ class Account(models.Model):
 
     customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='accounts', null=True, blank=True)
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='CHECKING')
-    currency = models.CharField(max_length=3, default='GHS')
+    currency = models.CharField(max_length=3, default='USD')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
     account_number = models.CharField(max_length=32, unique=True)
 

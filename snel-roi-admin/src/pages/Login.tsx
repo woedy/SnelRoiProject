@@ -1,63 +1,67 @@
-import { FormEvent, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { authService } from "@/services/authService";
+import { Loader2 } from "lucide-react";
 
 export default function Login() {
-  const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/";
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault()
-    setError('')
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+
+    const formData = new FormData(e.currentTarget);
+    
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      if (!response.ok) {
-        throw new Error('Invalid credentials')
-      }
-      const data = await response.json()
-      localStorage.setItem('admin_token', data.access)
-      navigate('/transactions')
+      const response = await authService.login(formData);
+      localStorage.setItem("admin_token", response.access_token);
+      navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError("Invalid credentials or server error");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-lg bg-slate-900 p-6">
-        <h1 className="text-xl font-semibold">Admin Login</h1>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <div>
-          <label className="text-sm text-slate-400">Email</label>
-          <input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-            type="email"
-            required
-          />
-        </div>
-        <div>
-          <label className="text-sm text-slate-400">Password</label>
-          <input
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-            type="password"
-            required
-          />
-        </div>
-        <button className="w-full rounded bg-emerald-500 py-2 text-sm font-semibold text-slate-900">
-          Sign in
-        </button>
-      </form>
+    <div className="flex h-screen w-full items-center justify-center bg-muted/40 px-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardDescription>
+            Enter your email below to login to your account.
+          </CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="grid gap-4">
+            {error && <div className="text-sm font-medium text-destructive">{error}</div>}
+            <div className="grid gap-2">
+              <Label htmlFor="username">Username</Label>
+              <Input id="username" name="username" type="text" placeholder="admin" required />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" name="password" type="password" required />
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button className="w-full" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sign in
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
     </div>
-  )
+  );
 }

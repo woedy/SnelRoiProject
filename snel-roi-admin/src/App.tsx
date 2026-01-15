@@ -1,37 +1,30 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import Layout from './components/Layout'
-import Accounts from './pages/Accounts'
-import Login from './pages/Login'
-import TransactionDetail from './pages/TransactionDetail'
-import Transactions from './pages/Transactions'
-import Users from './pages/Users'
+import { Routes, Route } from "react-router-dom";
+import AdminLayout from "./components/layout/AdminLayout";
+import Dashboard from "./pages/Dashboard";
+import Login from "./pages/Login";
+import RequireAuth from "./components/auth/RequireAuth";
+import Transactions from "./pages/Transactions";
+import Users from "./pages/Users";
 
-const RequireAuth = ({ children }: { children: JSX.Element }) => {
-  const token = localStorage.getItem('admin_token')
-  if (!token) {
-    return <Navigate to="/login" replace />
-  }
-  return children
-}
+// Placeholders for other routes
+// Placeholders for other routes
+const SettingsPage = () => <div className="p-4">Settings (Coming Soon)</div>;
 
-export default function App() {
+function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <Layout />
-          </RequireAuth>
-        }
-      >
-        <Route index element={<Navigate to="/transactions" replace />} />
-        <Route path="transactions" element={<Transactions />} />
-        <Route path="transactions/:id" element={<TransactionDetail />} />
-        <Route path="users" element={<Users />} />
-        <Route path="accounts" element={<Accounts />} />
+      
+      <Route element={<RequireAuth />}>
+        <Route path="/" element={<AdminLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="users" element={<Users />} />
+          <Route path="transactions" element={<Transactions />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
       </Route>
     </Routes>
-  )
+  );
 }
+
+export default App;

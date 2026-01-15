@@ -21,9 +21,10 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
-      DJANGO_DEBUG: 'false'
+      DJANGO_DEBUG: 'true'
       POSTGRES_DB: ${POSTGRES_DB:-snelroi}
       POSTGRES_USER: ${POSTGRES_USER:-snelroi}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snelroi}
@@ -35,8 +36,10 @@ services:
     depends_on:
       - postgres
       - redis
-    expose:
-      - '8000'
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./backend:/app
 
   celery:
     build:
@@ -55,30 +58,30 @@ services:
     depends_on:
       - backend
       - redis
-    expose:
-      - '8000'
+    volumes:
+      - ./backend:/app
 
   bank-frontend:
     build:
       context: .
       dockerfile: snel-roi-bank/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
-    expose:
-      - '80'
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
     depends_on:
       - backend
+    ports:
+      - '5173:80'
 
   admin-frontend:
     build:
       context: .
       dockerfile: snel-roi-admin/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
-    expose:
-      - '80'
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
     depends_on:
       - backend
+    ports:
+      - '5174:80'
 
 volumes:
   postgres_data:

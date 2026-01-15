@@ -46,15 +46,20 @@ npm install
 VITE_API_URL=http://localhost:8000/api npm run dev
 ```
 
-## Docker (Coolify Friendly)
-```bash
-cp .env.example .env
-# Update values as needed
+## Docker
 
-docker-compose up --build
+### Local (Docker Compose)
+```bash
+cp .env.local .env
+docker-compose -f docker-compose.local.yml up --build
 ```
 
-Containers expose internal ports only; Coolify can attach domains per service.
+### Production (Docker Compose)
+```bash
+cp .env.prod .env
+docker-compose -f docker-compose.prod.yml up -d --build
+```
+Containers publish host ports directly in each compose file.
 
 ## Demo Credentials
 - Admin user is created by `python manage.py seed_system` using:
