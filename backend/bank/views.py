@@ -12,6 +12,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement
 from .serializers import (
     AccountSerializer,
+    AdminAccountSerializer,
+    AdminAccountUpdateSerializer,
+    AdminLedgerEntrySerializer,
+    AdminUserCreateSerializer,
+    AdminUserSerializer,
+    AdminUserUpdateSerializer,
     BeneficiarySerializer,
     LedgerEntrySerializer,
     ProfileSerializer,
@@ -213,7 +219,7 @@ class AdminTransactionsView(APIView):
         entries = LedgerEntry.objects.all().order_by('-created_at')
         if status_filter:
             entries = entries.filter(status=status_filter)
-        return Response(LedgerEntrySerializer(entries, many=True).data)
+        return Response(AdminLedgerEntrySerializer(entries, many=True).data)
 
 
 class AdminTransactionDetailView(APIView):
@@ -224,7 +230,7 @@ class AdminTransactionDetailView(APIView):
 
     def get(self, request, pk):
         entry = self.get_object(pk)
-        return Response(LedgerEntrySerializer(entry).data)
+        return Response(AdminLedgerEntrySerializer(entry).data)
 
 
 class AdminTransactionApproveView(APIView):
@@ -233,7 +239,7 @@ class AdminTransactionApproveView(APIView):
     def post(self, request, pk):
         entry = LedgerEntry.objects.get(pk=pk)
         approve_entry(entry, request.user)
-        return Response(LedgerEntrySerializer(entry).data)
+        return Response(AdminLedgerEntrySerializer(entry).data)
 
 
 class AdminTransactionDeclineView(APIView):
@@ -242,7 +248,7 @@ class AdminTransactionDeclineView(APIView):
     def post(self, request, pk):
         entry = LedgerEntry.objects.get(pk=pk)
         decline_entry(entry, request.user)
-        return Response(LedgerEntrySerializer(entry).data)
+        return Response(AdminLedgerEntrySerializer(entry).data)
 
 
 class AdminUsersView(APIView):
@@ -252,16 +258,74 @@ class AdminUsersView(APIView):
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        users = UserSerializer(User.objects.all(), many=True)
+        users = AdminUserSerializer(User.objects.all(), many=True)
         return Response(users.data)
+
+    def post(self, request):
+        serializer = AdminUserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(AdminUserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class AdminUserDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        return User.objects.get(pk=pk)
+
+    def get(self, request, pk):
+        user = self.get_object(pk)
+        return Response(AdminUserSerializer(user).data)
+
+    def patch(self, request, pk):
+        user = self.get_object(pk)
+        serializer = AdminUserUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        password = data.pop('password', None)
+        if data:
+            AdminUserSerializer().update(user, data)
+        if password:
+            user.set_password(password)
+            user.save(update_fields=['password'])
+        return Response(AdminUserSerializer(user).data)
+
+    def delete(self, request, pk):
+        user = self.get_object(pk)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminAccountsView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
-        accounts = AccountSerializer(Account.objects.all(), many=True)
+        accounts = AdminAccountSerializer(Account.objects.all(), many=True)
         return Response(accounts.data)
+
+
+class AdminAccountDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        return Account.objects.get(pk=pk)
+
+    def get(self, request, pk):
+        account = self.get_object(pk)
+        return Response(AdminAccountSerializer(account).data)
+
+    def patch(self, request, pk):
+        account = self.get_object(pk)
+        serializer = AdminAccountUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(account, field, value)
+        account.save()
+        return Response(AdminAccountSerializer(account).data)
 
 
 class AdminAuditView(APIView):
