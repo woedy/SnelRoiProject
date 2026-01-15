@@ -12,7 +12,7 @@ import { toast } from '@/hooks/use-toast';
 
 const Register = () => {
   const { t } = useLanguage();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -26,14 +26,22 @@ const Register = () => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login();
-    toast({
-      title: t('common.success'),
-      description: t('auth.accountCreated'),
-    });
-    navigate('/app/dashboard');
+    try {
+      await register(formData.email, formData.password, formData.name);
+      toast({
+        title: t('common.success'),
+        description: t('auth.accountCreated'),
+      });
+      navigate('/app/dashboard');
+    } catch (error) {
+      toast({
+        title: t('common.error'),
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const benefits = [

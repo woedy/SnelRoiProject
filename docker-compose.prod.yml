@@ -1,0 +1,90 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - '5432'
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    expose:
+      - '6379'
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set in .env}
+      DJANGO_DEBUG: 'false'
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      CORS_ALLOW_ALL_ORIGINS: 'false'
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set in .env}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - '8000:8000'
+
+  celery:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A banking worker -l info
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - redis
+
+  bank-frontend:
+    build:
+      context: .
+      dockerfile: snel-roi-bank/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?set in .env}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '8080:80'
+
+  admin-frontend:
+    build:
+      context: .
+      dockerfile: snel-roi-admin/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:?set in .env}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '8081:80'
+
+volumes:
+  postgres_data:

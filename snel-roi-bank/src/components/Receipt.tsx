@@ -52,7 +52,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
       <div className="bg-card rounded-2xl p-6 shadow-card mt-6 space-y-4">
         <div className="flex justify-between items-center py-3 border-b border-border">
           <span className="text-muted-foreground">{t('common.amount')}</span>
-          <span className="font-semibold text-lg">${amount}</span>
+          <span className="font-semibold text-lg">₵{amount}</span>
         </div>
 
         {recipient && (

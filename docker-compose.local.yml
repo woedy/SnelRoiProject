@@ -1,0 +1,87 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-snelroi}
+      POSTGRES_USER: ${POSTGRES_USER:-snelroi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snelroi}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - '5432'
+
+  redis:
+    image: redis:7-alpine
+    expose:
+      - '6379'
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
+      DJANGO_DEBUG: 'true'
+      POSTGRES_DB: ${POSTGRES_DB:-snelroi}
+      POSTGRES_USER: ${POSTGRES_USER:-snelroi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snelroi}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      CORS_ALLOW_ALL_ORIGINS: 'true'
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./backend:/app
+
+  celery:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A banking worker -l info
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
+      POSTGRES_DB: ${POSTGRES_DB:-snelroi}
+      POSTGRES_USER: ${POSTGRES_USER:-snelroi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snelroi}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+    volumes:
+      - ./backend:/app
+
+  bank-frontend:
+    build:
+      context: .
+      dockerfile: snel-roi-bank/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+    depends_on:
+      - backend
+    ports:
+      - '5173:80'
+
+  admin-frontend:
+    build:
+      context: .
+      dockerfile: snel-roi-admin/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api}
+    depends_on:
+      - backend
+    ports:
+      - '5174:80'
+
+volumes:
+  postgres_data:
