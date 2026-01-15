@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+import random
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.mail import send_mail
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -9,9 +12,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode
 from .serializers import (
     AccountSerializer,
+    AdminAccountSerializer,
+    AdminAccountUpdateSerializer,
+    AdminLedgerEntrySerializer,
+    AdminUserCreateSerializer,
+    AdminUserSerializer,
+    AdminUserUpdateSerializer,
     BeneficiarySerializer,
     LedgerEntrySerializer,
     ProfileSerializer,
@@ -37,10 +46,11 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        refresh = RefreshToken.for_user(user)
+        verification_code = create_verification_code(user, 'EMAIL_VERIFICATION')
+        send_verification_email(user, verification_code.code)
         return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
+            'detail': 'Verification code sent to your email.',
+            'email': user.email,
         }, status=status.HTTP_201_CREATED)
 
 
@@ -55,9 +65,145 @@ class LoginView(APIView):
             from django.contrib.auth import authenticate
             user = authenticate(username=email, password=password)
         if not user:
+            if email:
+                User = get_user_model()
+                if User.objects.filter(email=email, is_active=False).exists():
+                    return Response({'detail': 'Email not verified'}, status=status.HTTP_403_FORBIDDEN)
             return Response({'detail': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
         refresh = RefreshToken.for_user(user)
         return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+
+
+def generate_code():
+    return f"{random.randint(0, 9999):04d}"
+
+
+def create_verification_code(user, purpose):
+    return VerificationCode.objects.create(
+        user=user,
+        code=generate_code(),
+        purpose=purpose,
+    )
+
+
+def send_verification_email(user, code):
+    send_mail(
+        subject='Verify your SnelROI account',
+        message=f'Your verification code is {code}. It expires in 10 minutes.',
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+    )
+
+
+def send_password_reset_email(user, code):
+    send_mail(
+        subject='Reset your SnelROI password',
+        message=f'Your password reset code is {code}. It expires in 10 minutes.',
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+    )
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        code = request.data.get('code')
+        if not email or not code:
+            return Response({'detail': 'Email and code are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({'detail': 'Invalid verification request.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        expiry_time = timezone.now() - timedelta(minutes=10)
+        verification = VerificationCode.objects.filter(
+            user=user,
+            purpose='EMAIL_VERIFICATION',
+            used_at__isnull=True,
+            created_at__gte=expiry_time,
+        ).order_by('-created_at').first()
+
+        if not verification or verification.code != str(code):
+            return Response({'detail': 'Invalid or expired code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+        verification.used_at = timezone.now()
+        verification.save(update_fields=['used_at'])
+
+        refresh = RefreshToken.for_user(user)
+        return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+
+
+class ResendVerificationView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+        if user and not user.is_active:
+            verification_code = create_verification_code(user, 'EMAIL_VERIFICATION')
+            send_verification_email(user, verification_code.code)
+
+        return Response({'detail': 'If the email exists, a verification code has been sent.'})
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+        if user:
+            reset_code = create_verification_code(user, 'PASSWORD_RESET')
+            send_password_reset_email(user, reset_code.code)
+
+        return Response({'detail': 'If the email exists, a reset code has been sent.'})
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        code = request.data.get('code')
+        new_password = request.data.get('new_password')
+        if not email or not code or not new_password:
+            return Response({'detail': 'Email, code, and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({'detail': 'Invalid reset request.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        expiry_time = timezone.now() - timedelta(minutes=10)
+        reset = VerificationCode.objects.filter(
+            user=user,
+            purpose='PASSWORD_RESET',
+            used_at__isnull=True,
+            created_at__gte=expiry_time,
+        ).order_by('-created_at').first()
+
+        if not reset or reset.code != str(code):
+            return Response({'detail': 'Invalid or expired code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        reset.used_at = timezone.now()
+        reset.save(update_fields=['used_at'])
+
+        return Response({'detail': 'Password reset successfully.'})
 
 
 class MeView(APIView):
@@ -213,7 +359,7 @@ class AdminTransactionsView(APIView):
         entries = LedgerEntry.objects.all().order_by('-created_at')
         if status_filter:
             entries = entries.filter(status=status_filter)
-        return Response(LedgerEntrySerializer(entries, many=True).data)
+        return Response(AdminLedgerEntrySerializer(entries, many=True).data)
 
 
 class AdminTransactionDetailView(APIView):
@@ -224,7 +370,7 @@ class AdminTransactionDetailView(APIView):
 
     def get(self, request, pk):
         entry = self.get_object(pk)
-        return Response(LedgerEntrySerializer(entry).data)
+        return Response(AdminLedgerEntrySerializer(entry).data)
 
 
 class AdminTransactionApproveView(APIView):
@@ -233,7 +379,7 @@ class AdminTransactionApproveView(APIView):
     def post(self, request, pk):
         entry = LedgerEntry.objects.get(pk=pk)
         approve_entry(entry, request.user)
-        return Response(LedgerEntrySerializer(entry).data)
+        return Response(AdminLedgerEntrySerializer(entry).data)
 
 
 class AdminTransactionDeclineView(APIView):
@@ -242,7 +388,7 @@ class AdminTransactionDeclineView(APIView):
     def post(self, request, pk):
         entry = LedgerEntry.objects.get(pk=pk)
         decline_entry(entry, request.user)
-        return Response(LedgerEntrySerializer(entry).data)
+        return Response(AdminLedgerEntrySerializer(entry).data)
 
 
 class AdminUsersView(APIView):
@@ -252,16 +398,74 @@ class AdminUsersView(APIView):
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        users = UserSerializer(User.objects.all(), many=True)
+        users = AdminUserSerializer(User.objects.all(), many=True)
         return Response(users.data)
+
+    def post(self, request):
+        serializer = AdminUserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(AdminUserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class AdminUserDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        return User.objects.get(pk=pk)
+
+    def get(self, request, pk):
+        user = self.get_object(pk)
+        return Response(AdminUserSerializer(user).data)
+
+    def patch(self, request, pk):
+        user = self.get_object(pk)
+        serializer = AdminUserUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        password = data.pop('password', None)
+        if data:
+            AdminUserSerializer().update(user, data)
+        if password:
+            user.set_password(password)
+            user.save(update_fields=['password'])
+        return Response(AdminUserSerializer(user).data)
+
+    def delete(self, request, pk):
+        user = self.get_object(pk)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminAccountsView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
-        accounts = AccountSerializer(Account.objects.all(), many=True)
+        accounts = AdminAccountSerializer(Account.objects.all(), many=True)
         return Response(accounts.data)
+
+
+class AdminAccountDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        return Account.objects.get(pk=pk)
+
+    def get(self, request, pk):
+        account = self.get_object(pk)
+        return Response(AdminAccountSerializer(account).data)
+
+    def patch(self, request, pk):
+        account = self.get_object(pk)
+        serializer = AdminAccountUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(account, field, value)
+        account.save()
+        return Response(AdminAccountSerializer(account).data)
 
 
 class AdminAuditView(APIView):

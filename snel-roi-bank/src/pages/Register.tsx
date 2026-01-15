@@ -29,12 +29,12 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await register(formData.email, formData.password, formData.name);
+      const email = await register(formData.email, formData.password, formData.name);
       toast({
         title: t('common.success'),
-        description: t('auth.accountCreated'),
+        description: 'Verification code sent to your email.',
       });
-      navigate('/app/dashboard');
+      navigate('/verify-email', { state: { email } });
     } catch (error) {
       toast({
         title: t('common.error'),

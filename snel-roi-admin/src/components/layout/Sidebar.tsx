@@ -1,10 +1,11 @@
-import { LayoutDashboard, Users, CreditCard, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Users, label: "Users", href: "/users" },
+  { icon: Wallet, label: "Accounts", href: "/accounts" },
   { icon: CreditCard, label: "Transactions", href: "/transactions" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
@@ -28,7 +29,7 @@ export function Sidebar() {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all text-foreground/80 hover:text-foreground hover:bg-muted/50",
                   isActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary font-semibold"
                 )}
               >

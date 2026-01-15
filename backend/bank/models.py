@@ -127,3 +127,19 @@ class Statement(models.Model):
 
     def __str__(self):
         return f"Statement {self.period_start} - {self.period_end}"
+
+
+class VerificationCode(models.Model):
+    PURPOSE_CHOICES = [
+        ('EMAIL_VERIFICATION', 'Email Verification'),
+        ('PASSWORD_RESET', 'Password Reset'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='verification_codes')
+    code = models.CharField(max_length=4)
+    purpose = models.CharField(max_length=30, choices=PURPOSE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.purpose}"
