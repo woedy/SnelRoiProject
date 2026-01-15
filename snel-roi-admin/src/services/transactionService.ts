@@ -2,12 +2,13 @@ import { apiRequest } from "@/lib/api";
 
 export interface Transaction {
     id: number;
+    reference: string;
     amount: string;
-    transaction_type: string;
+    entry_type: string;
     status: string;
-    description: string;
+    memo: string;
     created_at: string;
-    user_email?: string;
+    created_by_email?: string;
 }
 
 export const transactionService = {

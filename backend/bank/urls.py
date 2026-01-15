@@ -23,6 +23,8 @@ urlpatterns = [
     path('admin/transactions/<int:pk>/approve', views.AdminTransactionApproveView.as_view()),
     path('admin/transactions/<int:pk>/decline', views.AdminTransactionDeclineView.as_view()),
     path('admin/users', views.AdminUsersView.as_view()),
+    path('admin/users/<int:pk>', views.AdminUserDetailView.as_view()),
     path('admin/accounts', views.AdminAccountsView.as_view()),
+    path('admin/accounts/<int:pk>', views.AdminAccountDetailView.as_view()),
     path('admin/audit', views.AdminAuditView.as_view()),
 ]

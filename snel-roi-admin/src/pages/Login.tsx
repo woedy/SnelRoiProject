@@ -23,7 +23,7 @@ export default function Login() {
     
     try {
       const response = await authService.login(formData);
-      localStorage.setItem("admin_token", response.access_token);
+      localStorage.setItem("admin_token", response.access);
       navigate(from, { replace: true });
     } catch (err) {
       setError("Invalid credentials or server error");
@@ -46,8 +46,8 @@ export default function Login() {
           <CardContent className="grid gap-4">
             {error && <div className="text-sm font-medium text-destructive">{error}</div>}
             <div className="grid gap-2">
-              <Label htmlFor="username">Username</Label>
-              <Input id="username" name="username" type="text" placeholder="admin" required />
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="admin@example.com" required />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>

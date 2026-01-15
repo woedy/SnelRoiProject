@@ -77,11 +77,12 @@ export default function Transactions() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border/50">
-                <TableHead>ID</TableHead>
-                <TableHead>User</TableHead>
+                <TableHead>Reference</TableHead>
+                <TableHead>Initiated By</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Memo</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -89,19 +90,20 @@ export default function Transactions() {
             <TableBody>
               {transactions.map((tx) => (
                 <TableRow key={tx.id} className="hover:bg-muted/50 border-border/50 transition-colors">
-                  <TableCell className="font-medium">{tx.id}</TableCell>
-                  <TableCell>{tx.user_email || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
-                  <TableCell className="capitalize">{tx.transaction_type}</TableCell>
-                  <TableCell className="font-mono">${tx.amount}</TableCell>
+                  <TableCell className="font-medium">{tx.reference}</TableCell>
+                  <TableCell>{tx.created_by_email || <span className="text-muted-foreground italic">System</span>}</TableCell>
+                  <TableCell className="capitalize">{tx.entry_type}</TableCell>
+                  <TableCell className="font-mono">₵{Number(tx.amount).toLocaleString('en-US')}</TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                      tx.status === 'COMPLETED' ? 'bg-green-500/10 text-green-500 ring-green-500/20' :
+                      tx.status === 'POSTED' ? 'bg-green-500/10 text-green-500 ring-green-500/20' :
                       tx.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500 ring-yellow-500/20' :
                       'bg-red-500/10 text-red-500 ring-red-500/20'
                     }`}>
                       {tx.status}
                     </span>
                   </TableCell>
+                  <TableCell className="text-muted-foreground">{tx.memo || "-"}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(tx.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
                     {tx.status === 'PENDING' && (
