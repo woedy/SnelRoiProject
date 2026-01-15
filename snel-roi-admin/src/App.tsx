@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import RequireAuth from "./components/auth/RequireAuth";
 import Transactions from "./pages/Transactions";
 import Users from "./pages/Users";
+import Accounts from "./pages/Accounts";
 
 // Placeholders for other routes
 // Placeholders for other routes
@@ -19,6 +20,7 @@ function App() {
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="users" element={<Users />} />
+          <Route path="accounts" element={<Accounts />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

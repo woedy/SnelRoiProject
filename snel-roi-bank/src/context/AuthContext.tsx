@@ -5,7 +5,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: { id: number; email: string; username: string; is_staff: boolean } | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string) => Promise<void>;
+  register: (email: string, password: string, fullName: string) => Promise<string>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -29,14 +33,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async (email: string, password: string, fullName: string) => {
-    const data = await apiRequest<{ access: string }>('/auth/register', {
+    const data = await apiRequest<{ email: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, full_name: fullName }),
+    });
+    return data.email;
+  };
+
+  const verifyEmail = async (email: string, code: string) => {
+    const data = await apiRequest<{ access: string }>('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
     });
     localStorage.setItem('snel-roi-token', data.access);
     const me = await apiRequest<AuthContextType['user']>('/me');
     setUser(me);
     setIsAuthenticated(true);
+  };
+
+  const resendVerification = async (email: string) => {
+    await apiRequest('/auth/verify-email/resend', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  };
+
+  const requestPasswordReset = async (email: string) => {
+    await apiRequest('/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  };
+
+  const confirmPasswordReset = async (email: string, code: string, newPassword: string) => {
+    await apiRequest('/auth/password-reset/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
   };
 
   const logout = () => {
@@ -62,7 +95,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, register, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, register, verifyEmail, resendVerification, requestPasswordReset, confirmPasswordReset, logout }}>
       {children}
     </AuthContext.Provider>
   );

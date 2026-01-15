@@ -13,6 +13,8 @@ import { useEffect } from "react";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import VerifyEmail from "./pages/VerifyEmail";
+import ResetPassword from "./pages/ResetPassword";
 import Features from "./pages/Features";
 import Security from "./pages/Security";
 import FAQ from "./pages/FAQ";
@@ -79,6 +81,8 @@ const App = () => (
               <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
               {/* App Routes */}
               <Route path="/app/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />

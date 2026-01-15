@@ -28,9 +28,19 @@ const Login = () => {
       });
       navigate('/app/dashboard');
     } catch (error) {
+      const message = (error as Error).message;
+      if (message === 'Email not verified') {
+        toast({
+          title: 'Verify your email',
+          description: 'Enter the 4-digit code we sent to activate your account.',
+          variant: 'destructive',
+        });
+        navigate('/verify-email', { state: { email } });
+        return;
+      }
       toast({
         title: t('common.error'),
-        description: (error as Error).message,
+        description: message,
         variant: 'destructive',
       });
     }
@@ -71,7 +81,7 @@ const Login = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">{t('auth.password')}</Label>
-                <Link to="/" className="text-sm text-accent hover:underline">
+                <Link to="/reset-password" className="text-sm text-accent hover:underline">
                   {t('auth.forgot')}
                 </Link>
               </div>
