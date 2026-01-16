@@ -107,3 +107,7 @@ SYSTEM_ACCOUNT_NUMBER = os.environ.get('SYSTEM_ACCOUNT_NUMBER', 'SYS-0001')
 PAYOUT_ACCOUNT_NUMBER = os.environ.get('PAYOUT_ACCOUNT_NUMBER', 'SYS-0002')
 AUTO_APPROVE_DEPOSITS = os.environ.get('AUTO_APPROVE_DEPOSITS', 'true').lower() == 'true'
 TRANSACTION_REVIEW_DELAY_SECONDS = int(os.environ.get('TRANSACTION_REVIEW_DELAY_SECONDS', '5'))
+
+EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+EMAIL_FILE_PATH = BASE_DIR / 'sent_emails'
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@snelroi.local')
