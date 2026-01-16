@@ -26,6 +26,8 @@ const getErrorMessage = (errorBody: unknown): string => {
   return 'Request failed';
 };
 
+
+
 export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {}): Promise<T> => {
   const token = localStorage.getItem('snel-roi-token');
   const headers = new Headers(options.headers);
