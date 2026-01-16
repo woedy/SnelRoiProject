@@ -24,6 +24,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (email: string, password: string) => {
     const data = await apiRequest<{ access: string }>('/auth/login', {
       method: 'POST',
+      auth: false,
       body: JSON.stringify({ email, password }),
     });
     localStorage.setItem('snel-roi-token', data.access);
@@ -35,6 +36,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const register = async (email: string, password: string, fullName: string) => {
     const data = await apiRequest<{ email: string }>('/auth/register', {
       method: 'POST',
+      auth: false,
       body: JSON.stringify({ email, password, full_name: fullName }),
     });
     return data.email;
@@ -43,6 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const verifyEmail = async (email: string, code: string) => {
     const data = await apiRequest<{ access: string }>('/auth/verify-email', {
       method: 'POST',
+      auth: false,
       body: JSON.stringify({ email, code }),
     });
     localStorage.setItem('snel-roi-token', data.access);
@@ -54,6 +57,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const resendVerification = async (email: string) => {
     await apiRequest('/auth/verify-email/resend', {
       method: 'POST',
+      auth: false,
       body: JSON.stringify({ email }),
     });
   };
@@ -61,6 +65,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const requestPasswordReset = async (email: string) => {
     await apiRequest('/auth/password-reset/request', {
       method: 'POST',
+      auth: false,
       body: JSON.stringify({ email }),
     });
   };
@@ -68,6 +73,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const confirmPasswordReset = async (email: string, code: string, newPassword: string) => {
     await apiRequest('/auth/password-reset/confirm', {
       method: 'POST',
+      auth: false,
       body: JSON.stringify({ email, code, new_password: newPassword }),
     });
   };
