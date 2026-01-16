@@ -30,6 +30,7 @@ const Register = () => {
     e.preventDefault();
     try {
       const email = await register(formData.email, formData.password, formData.name);
+      localStorage.setItem('snel-roi-pending-verification', email);
       toast({
         title: t('common.success'),
         description: 'Verification code sent to your email.',
