@@ -30,6 +30,7 @@ const Login = () => {
     } catch (error) {
       const message = (error as Error).message;
       if (message === 'Email not verified') {
+        localStorage.setItem('snel-roi-pending-verification', email);
         toast({
           title: 'Verify your email',
           description: 'Enter the 4-digit code we sent to activate your account.',

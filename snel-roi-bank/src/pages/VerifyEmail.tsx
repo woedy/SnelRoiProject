@@ -11,7 +11,10 @@ const VerifyEmail = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { verifyEmail, resendVerification } = useAuth();
-  const initialEmail = (location.state as { email?: string } | null)?.email ?? '';
+  const initialEmail =
+    (location.state as { email?: string } | null)?.email ??
+    localStorage.getItem('snel-roi-pending-verification') ??
+    '';
   const [email, setEmail] = useState(initialEmail);
   const [digits, setDigits] = useState(['', '', '', '']);
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
@@ -39,6 +42,7 @@ const VerifyEmail = () => {
     try {
       await verifyEmail(email, code);
       toast({ title: 'Email verified', description: 'Welcome to your new account.' });
+      localStorage.removeItem('snel-roi-pending-verification');
       navigate('/app/dashboard');
     } catch (error) {
       toast({
@@ -51,6 +55,14 @@ const VerifyEmail = () => {
 
   const handleResend = async () => {
     try {
+      if (!email) {
+        toast({
+          title: 'Email required',
+          description: 'Enter your email to resend the verification code.',
+          variant: 'destructive',
+        });
+        return;
+      }
       await resendVerification(email);
       toast({ title: 'Code sent', description: 'Check your inbox for the new code.' });
     } catch (error) {
