@@ -43,6 +43,11 @@ interface DashboardData {
   total_balance: number;
   insights: { debits_last_30_days: number; credits_last_30_days: number };
   virtual_card: { status: string; last_four: string };
+  account_status?: {
+    has_frozen_account: boolean;
+    frozen_account_numbers: string[];
+    message: string | null;
+  };
 }
 
 const Dashboard = () => {
@@ -96,6 +101,28 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 lg:space-y-8 pb-20 lg:pb-0">
+      {/* Frozen Account Alert */}
+      {dashboard?.account_status?.has_frozen_account && (
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-white text-xs font-bold">!</span>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-red-900 dark:text-red-100 font-semibold mb-1">
+                {t('dashboard.accountFrozen')}
+              </h3>
+              <p className="text-red-700 dark:text-red-300 text-sm">
+                Your account {dashboard.account_status.frozen_account_numbers[0]} has been frozen. Please contact <strong>customer care at 1-800-BANK-HELP</strong> to resolve this issue.
+              </p>
+              <p className="text-red-600 dark:text-red-400 text-xs mt-1">
+                {t('dashboard.frozenAccount')}: {dashboard.account_status.frozen_account_numbers[0]}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">
           {t('dashboard.welcome')}, {user?.username.split('@')[0]}! 👋
@@ -108,7 +135,7 @@ const Dashboard = () => {
           <div className="relative z-10">
             <p className="text-sm opacity-70 mb-1">{t('dashboard.totalBalance')}</p>
             <p className="text-4xl lg:text-5xl font-bold mb-6">
-              ₵{Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </p>
             <div className="flex gap-8">
               <div>
@@ -117,7 +144,7 @@ const Dashboard = () => {
                   {t('dashboard.available')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ₵{Number(totalAvailable).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(totalAvailable).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div>
@@ -126,7 +153,7 @@ const Dashboard = () => {
                   {t('dashboard.pending')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ₵{Number(pendingAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(pendingAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -174,7 +201,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <p className="font-semibold text-foreground">
-                  ₵{Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             ))}
@@ -211,7 +238,7 @@ const Dashboard = () => {
                   <div className="text-right">
                     <p className="text-xs opacity-70">{user?.username}</p>
                     <p className="text-sm font-medium mt-1">
-                      GHS {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
+                      USD {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
                     </p>
                   </div>
                 </div>
@@ -268,11 +295,11 @@ const Dashboard = () => {
           <div className="grid gap-3">
             <div className="rounded-xl bg-secondary/40 p-4">
               <p className="text-xs text-muted-foreground">Credits last 30 days</p>
-              <p className="text-lg font-semibold">₵{Number(dashboard?.insights.credits_last_30_days ?? 0).toFixed(2)}</p>
+              <p className="text-lg font-semibold">${Number(dashboard?.insights.credits_last_30_days ?? 0).toFixed(2)}</p>
             </div>
             <div className="rounded-xl bg-secondary/40 p-4">
               <p className="text-xs text-muted-foreground">Debits last 30 days</p>
-              <p className="text-lg font-semibold">₵{Number(dashboard?.insights.debits_last_30_days ?? 0).toFixed(2)}</p>
+              <p className="text-lg font-semibold">${Number(dashboard?.insights.debits_last_30_days ?? 0).toFixed(2)}</p>
             </div>
           </div>
         </div>

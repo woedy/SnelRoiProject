@@ -22,6 +22,7 @@ from .serializers import (
     AdminUserSerializer,
     AdminUserUpdateSerializer,
     BeneficiarySerializer,
+    ExternalTransferSerializer,
     LedgerEntrySerializer,
     ProfileSerializer,
     RegisterSerializer,
@@ -216,6 +217,10 @@ class DashboardView(APIView):
         profile = request.user.profile
         accounts_qs = profile.accounts.all()
         accounts = AccountSerializer(accounts_qs, many=True).data
+        # Check if any account is frozen
+        frozen_accounts = accounts_qs.filter(status='FROZEN')
+        has_frozen_account = frozen_accounts.exists()
+        frozen_account_numbers = list(frozen_accounts.values_list('account_number', flat=True))
         entries = LedgerEntry.objects.filter(postings__account__customer=profile).distinct().order_by('-created_at')[:5]
         total_balance = sum([account.balance() for account in accounts_qs])
         last_30_days = timezone.now() - timedelta(days=30)
@@ -230,6 +235,11 @@ class DashboardView(APIView):
             'accounts': accounts,
             'recent_transactions': LedgerEntrySerializer(entries, many=True).data,
             'total_balance': total_balance,
+            'account_status': {
+                'has_frozen_account': has_frozen_account,
+                'frozen_account_numbers': frozen_account_numbers,
+                'message': 'One or more accounts are frozen. Please contact customer care.' if has_frozen_account else None
+            },
             'insights': {
                 'debits_last_30_days': summary['debits'] or 0,
                 'credits_last_30_days': summary['credits'] or 0,
@@ -263,7 +273,9 @@ class DepositView(APIView):
         amount = Decimal(request.data.get('amount', '0'))
         memo = request.data.get('memo', '')
         profile = request.user.profile
-        account = profile.accounts.first()
+        account = profile.accounts.filter(status='ACTIVE').first()
+        if not account:
+            return Response({'detail': 'No active account found or account is frozen. Please contact customer care.'}, status=status.HTTP_400_BAD_REQUEST)
         funding, _ = get_system_accounts()
         entry = create_entry('DEPOSIT', request.user, memo=memo)
         add_posting(entry, account, 'CREDIT', amount, 'Customer deposit')
@@ -279,7 +291,9 @@ class TransferView(APIView):
         memo = request.data.get('memo', '')
         target_account_number = request.data.get('target_account_number')
         profile = request.user.profile
-        account = profile.accounts.first()
+        account = profile.accounts.filter(status='ACTIVE').first()
+        if not account:
+            return Response({'detail': 'No active account found or account is frozen. Please contact customer care.'}, status=status.HTTP_400_BAD_REQUEST)
         recipient = Account.objects.filter(account_number=target_account_number).first()
         if not recipient:
             return Response({'detail': 'Recipient account not found'}, status=status.HTTP_400_BAD_REQUEST)
@@ -294,7 +308,9 @@ class WithdrawalView(APIView):
         amount = Decimal(request.data.get('amount', '0'))
         memo = request.data.get('memo', '')
         profile = request.user.profile
-        account = profile.accounts.first()
+        account = profile.accounts.filter(status='ACTIVE').first()
+        if not account:
+            return Response({'detail': 'No active account found or account is frozen. Please contact customer care.'}, status=status.HTTP_400_BAD_REQUEST)
         _, payout = get_system_accounts()
         entry = create_entry('WITHDRAWAL', request.user, memo=memo)
         add_posting(entry, account, 'DEBIT', amount, 'Withdrawal')
@@ -474,3 +490,80 @@ class AdminAuditView(APIView):
     def get(self, request):
         recent_entries = LedgerEntry.objects.order_by('-created_at')[:25]
         return Response({'entries': LedgerEntrySerializer(recent_entries, many=True).data})
+
+
+class ExternalTransferView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        from .services import create_external_transfer
+        
+        serializer = ExternalTransferSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            transaction = create_external_transfer(
+                user=request.user,
+                amount=serializer.validated_data['amount'],
+                memo=serializer.validated_data.get('memo', ''),
+                recipient_details=serializer.validated_data['recipient_details'],
+                fee=serializer.validated_data['fee']
+            )
+            
+            return Response({
+                'reference': transaction.reference,
+                'status': transaction.status,
+                'fee': transaction.external_data.get('fee', 0)
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class FreezeAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        account_number = request.data.get('account_number')
+        if not account_number:
+            return Response({'detail': 'Account number is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        profile = request.user.profile
+        account = Account.objects.filter(
+            customer=profile,
+            account_number=account_number
+        ).first()
+        
+        if not account:
+            return Response({'detail': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        account.status = 'FROZEN'
+        account.save(update_fields=['status'])
+        
+        return Response({'detail': f'Account {account_number} has been frozen'}, status=status.HTTP_200_OK)
+
+
+class UnfreezeAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        account_number = request.data.get('account_number')
+        if not account_number:
+            return Response({'detail': 'Account number is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        profile = request.user.profile
+        account = Account.objects.filter(
+            customer=profile,
+            account_number=account_number
+        ).first()
+        
+        if not account:
+            return Response({'detail': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        account.status = 'ACTIVE'
+        account.save(update_fields=['status'])
+        
+        return Response({'detail': f'Account {account_number} has been unfrozen'}, status=status.HTTP_200_OK)

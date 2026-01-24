@@ -36,6 +36,7 @@ import VirtualCardsFeature from "./pages/features/VirtualCards";
 import Dashboard from "./pages/app/Dashboard";
 import Deposit from "./pages/app/Deposit";
 import Transfer from "./pages/app/Transfer";
+import ExternalTransfer from "./pages/app/ExternalTransfer";
 import Withdraw from "./pages/app/Withdraw";
 import Statements from "./pages/app/Statements";
 import Transactions from "./pages/app/Transactions";
@@ -88,6 +89,7 @@ const App = () => (
               <Route path="/app/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
               <Route path="/app/deposit" element={<AppLayout><Deposit /></AppLayout>} />
               <Route path="/app/transfer" element={<AppLayout><Transfer /></AppLayout>} />
+              <Route path="/app/external-transfer" element={<AppLayout><ExternalTransfer /></AppLayout>} />
               <Route path="/app/withdraw" element={<AppLayout><Withdraw /></AppLayout>} />
               <Route path="/app/statements" element={<AppLayout><Statements /></AppLayout>} />
               <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />

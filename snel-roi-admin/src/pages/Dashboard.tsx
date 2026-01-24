@@ -65,7 +65,7 @@ export default function Dashboard() {
             <DollarSign className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₵{stats.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+            <div className="text-2xl font-bold">${stats.totalBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground">Across all customer accounts</p>
           </CardContent>
         </Card>

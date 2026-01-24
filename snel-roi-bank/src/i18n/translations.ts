@@ -78,16 +78,18 @@ export const translations: Record<Language, Record<string, string>> = {
     // Dashboard
     'dashboard.welcome': 'Welcome back',
     'dashboard.totalBalance': 'Total Balance',
-    'dashboard.available': 'Available',
-    'dashboard.pending': 'Pending',
-    'dashboard.accounts': 'Your Accounts',
-    'dashboard.checking': 'Checking Account',
-    'dashboard.savings': 'Savings Account',
+    'dashboard.accountFrozen': 'Account Frozen',
+    'dashboard.frozenAccounts': 'Frozen Accounts',
+    'dashboard.frozenAccount': 'Frozen Account',
+    'dashboard.recentTransactions': 'Recent Transactions',
+    'dashboard.seeAll': 'See All',
+    'dashboard.insights': 'Insights',
+    'dashboard.debits': 'Debits (last 30 days)',
+    'dashboard.credits': 'Credits (last 30 days)',
     'dashboard.business': 'Business Account',
     'dashboard.quickActions': 'Quick Actions',
-    'dashboard.recentTransactions': 'Recent Transactions',
     'dashboard.viewAll': 'View All',
-    'dashboard.insights': 'Spending Insights',
+    'dashboard.spendingInsights': 'Spending Insights',
     'dashboard.virtualCard': 'Virtual Card',
     'dashboard.virtualCardDetails': 'Card Details',
     'dashboard.virtualCardMonthlyLimit': 'Monthly Limit',
@@ -277,8 +279,47 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Contact Sales',
     'cta.disclaimer': 'No credit check required • Free for personal use • Cancel anytime',
 
-    // Common Extended
-    'common.learnMore': 'Learn more',
+    // Common
+    'common.amount': 'Amount',
+    'common.error': 'Error',
+    'common.processing': 'Processing...',
+    'common.confirm': 'Confirm',
+    'common.cancel': 'Cancel',
+    'common.businessDays': 'business days',
+    'common.date': 'Date',
+
+    // External Transfer
+    'externalTransfer.title': 'External Transfer',
+    'externalTransfer.subtitle': 'Send to other banks',
+    'externalTransfer.recipientDetails': 'Enter recipient bank details',
+    'externalTransfer.transferAmount': 'Enter transfer amount',
+    'externalTransfer.confirmTransfer': 'Confirm external transfer',
+    'externalTransfer.requiredFields': 'All required fields must be completed',
+    'externalTransfer.bankDetails': 'Bank Account Details',
+    'externalTransfer.secureTransfer': 'Secure external transfer',
+    'externalTransfer.recipientName': 'Recipient Name',
+    'externalTransfer.bankName': 'Bank Name',
+    'externalTransfer.accountNumber': 'Account Number',
+    'externalTransfer.routingNumber': 'Routing Number',
+    'externalTransfer.accountType': 'Account Type',
+    'externalTransfer.checking': 'Checking',
+    'externalTransfer.savings': 'Savings',
+    'externalTransfer.country': 'Country',
+    'externalTransfer.swiftCode': 'SWIFT Code',
+    'externalTransfer.external': 'External',
+    'externalTransfer.externalBank': 'External Bank',
+    'externalTransfer.importantInfo': 'Important Information',
+    'externalTransfer.processingTime': 'Processing Time',
+    'externalTransfer.transferFee': 'Transfer Fee',
+    'externalTransfer.minimum': 'minimum',
+    'externalTransfer.notePlaceholder': 'Add a note for the recipient (optional)',
+    'externalTransfer.transferSummary': 'Transfer Summary',
+    'externalTransfer.totalAmount': 'Total Amount',
+    'externalTransfer.confirmDetails': 'Confirm Transfer Details',
+    'externalTransfer.recipient': 'Recipient',
+    'externalTransfer.bank': 'Bank',
+    'externalTransfer.account': 'Account',
+    'externalTransfer.success': 'External Transfer Successful',
 
     // Security Page
     'security.pageTitle': 'Your Security is Our Priority',
@@ -747,8 +788,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Vertrieb kontaktieren',
     'cta.disclaimer': 'Keine Kreditprüfung erforderlich • Kostenlos für die private Nutzung • Jederzeit kündbar',
 
-    // Common Extended
-    'common.learnMore': 'Mehr erfahren',
+    // Common
+    'common.amount': 'Betrag',
+    'common.error': 'Fehler',
+    'common.processing': 'Verarbeitung...',
+    'common.confirm': 'Bestätigen',
+    'common.cancel': 'Abbrechen',
 
     // Security Page
     'security.pageTitle': 'Ihre Sicherheit ist unsere Priorität',
@@ -1217,8 +1262,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Contactar ventas',
     'cta.disclaimer': 'Sin verificación de crédito • Gratis para uso personal • Cancelar en cualquier momento',
 
-    // Common Extended
-    'common.learnMore': 'Saber más',
+    // Common
+    'common.amount': 'Cantidad',
+    'common.error': 'Error',
+    'common.processing': 'Procesando...',
+    'common.confirm': 'Confirmar',
+    'common.cancel': 'Cancelar',
 
     // Security Page
     'security.pageTitle': 'Tu Seguridad es Nuestra Prioridad',
@@ -1688,8 +1737,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Contacter les ventes',
     'cta.disclaimer': 'Pas de vérification de crédit • Gratuit pour usage personnel • Annuler à tout moment',
 
-    // Common Extended
-    'common.learnMore': 'En savoir plus',
+    // Common
+    'common.amount': 'Montant',
+    'common.error': 'Erreur',
+    'common.processing': 'Traitement...',
+    'common.confirm': 'Confirmer',
+    'common.cancel': 'Annuler',
 
     // Security Page
     'security.pageTitle': 'Votre Sécurité est Notre Priorité',

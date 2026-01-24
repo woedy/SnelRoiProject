@@ -93,7 +93,7 @@ export default function Transactions() {
                   <TableCell className="font-medium">{tx.reference}</TableCell>
                   <TableCell>{tx.created_by_email || <span className="text-muted-foreground italic">System</span>}</TableCell>
                   <TableCell className="capitalize">{tx.entry_type}</TableCell>
-                  <TableCell className="font-mono">₵{Number(tx.amount).toLocaleString('en-US')}</TableCell>
+                    <TableCell className="font-mono">${Number(tx.amount).toLocaleString('en-US')}</TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
                       tx.status === 'POSTED' ? 'bg-green-500/10 text-green-500 ring-green-500/20' :

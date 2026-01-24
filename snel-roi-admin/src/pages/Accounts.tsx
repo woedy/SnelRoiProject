@@ -100,7 +100,7 @@ export default function Accounts() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    ₵{Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ${Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

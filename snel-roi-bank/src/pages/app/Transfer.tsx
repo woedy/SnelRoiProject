@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Receipt } from '@/components/Receipt';
 import { apiRequest } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
-import { UserPlus, ChevronRight, ArrowLeft, Check } from 'lucide-react';
+import { UserPlus, ChevronRight, ArrowLeft, Check, ExternalLink } from 'lucide-react';
 
 interface Beneficiary {
   id: number;
@@ -27,6 +27,7 @@ const Transfer = () => {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [reference, setReference] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     apiRequest<Beneficiary[]>('/beneficiaries').then(setBeneficiaries).catch(() => setBeneficiaries([]));
@@ -43,7 +44,12 @@ const Transfer = () => {
   };
 
   const handleConfirm = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
     try {
+      // Add artificial delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       const targetAccount = selectedBeneficiary === 'new'
         ? newRecipient.account
         : beneficiaries.find((b) => b.id.toString() === selectedBeneficiary)?.account_number;
@@ -62,6 +68,8 @@ const Transfer = () => {
         description: (error as Error).message,
         variant: 'destructive',
       });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -154,6 +162,20 @@ const Transfer = () => {
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground" />
           </button>
+
+          <button
+            onClick={() => navigate('/app/external-transfer')}
+            className="w-full flex items-center gap-4 p-4 rounded-xl bg-primary/5 border-2 border-primary/20 hover:bg-primary/10 transition-colors"
+          >
+            <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
+              <ExternalLink className="h-5 w-5" />
+            </div>
+            <div className="text-left flex-1">
+              <p className="font-semibold text-foreground">{t('externalTransfer.title')}</p>
+              <p className="text-sm text-muted-foreground">{t('externalTransfer.subtitle')}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </button>
         </div>
       )}
 
@@ -210,7 +232,7 @@ const Transfer = () => {
               <Label htmlFor="amount">{t('common.amount')}</Label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-semibold text-muted-foreground">
-                  ₵
+                  $
                 </span>
                 <Input
                   id="amount"
@@ -230,7 +252,7 @@ const Transfer = () => {
                     size="sm"
                     onClick={() => setAmount(preset.toString())}
                   >
-                    ₵{preset}
+                    ${preset}
                   </Button>
                 ))}
               </div>
@@ -248,9 +270,18 @@ const Transfer = () => {
             />
           </div>
 
-          <Button size="lg" className="w-full" onClick={handleConfirm}>
-            {t('action.confirm')}
-            <ChevronRight className="ml-2 h-4 w-4" />
+          <Button size="lg" className="w-full" onClick={handleConfirm} disabled={isProcessing}>
+            {isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent mr-2" />
+                {t('common.processing')}
+              </>
+            ) : (
+              <>
+                {t('action.confirm')}
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </>
+            )}
           </Button>
         </div>
       )}

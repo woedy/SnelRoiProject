@@ -13,7 +13,7 @@ const SettingsPage = () => <div className="p-4">Settings (Coming Soon)</div>;
 
 function App() {
   return (
-    <Routes>
+      <Routes>
       <Route path="/login" element={<Login />} />
       
       <Route element={<RequireAuth />}>
@@ -25,7 +25,7 @@ function App() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>
-    </Routes>
+      </Routes>
   );
 }
 

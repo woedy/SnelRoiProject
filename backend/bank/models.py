@@ -63,6 +63,7 @@ class LedgerEntry(models.Model):
         ('DEPOSIT', 'Deposit'),
         ('TRANSFER', 'Transfer'),
         ('WITHDRAWAL', 'Withdrawal'),
+        ('EXTERNAL_TRANSFER', 'External Transfer'),
     ]
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
@@ -80,6 +81,7 @@ class LedgerEntry(models.Model):
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='entries_approved')
     approved_at = models.DateTimeField(null=True, blank=True)
     memo = models.CharField(max_length=255, blank=True)
+    external_data = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f"{self.reference} ({self.entry_type})"

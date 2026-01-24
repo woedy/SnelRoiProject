@@ -196,3 +196,24 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerProfile
         fields = ['full_name', 'phone', 'preferred_language', 'kyc_status', 'tier', 'user']
+
+
+from decimal import Decimal
+
+class ExternalTransferSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    memo = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    recipient_details = serializers.DictField()
+    fee = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'))
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be greater than 0")
+        return value
+
+    def validate_recipient_details(self, value):
+        required_fields = ['recipientName', 'bankName', 'accountNumber', 'routingNumber']
+        for field in required_fields:
+            if not value.get(field):
+                raise serializers.ValidationError(f"{field} is required")
+        return value
