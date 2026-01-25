@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
