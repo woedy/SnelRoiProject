@@ -9,18 +9,30 @@ const isPublicAuthPath = (path: string) => {
   return normalized.startsWith('/auth/');
 };
 
-const getErrorMessage = (errorBody: unknown): string => {
+export const getErrorMessage = (errorBody: unknown): string => {
   if (!errorBody || typeof errorBody !== 'object') return 'Request failed';
 
   const body = errorBody as Record<string, unknown>;
 
   if (typeof body.detail === 'string' && body.detail.trim()) return body.detail;
 
+  if (Array.isArray(body.non_field_errors) && body.non_field_errors.length > 0) {
+    return body.non_field_errors.join(' ');
+  }
+
   const messages = body.messages;
   if (Array.isArray(messages) && messages.length > 0) {
     const first = messages[0] as Record<string, unknown>;
     const message = first?.message;
     if (typeof message === 'string' && message.trim()) return message;
+  }
+
+  // Fallback: Check for other field errors (e.g., "amount": ["Invalid amount"])
+  const firstKey = Object.keys(body)[0];
+  if (firstKey && Array.isArray(body[firstKey]) && body[firstKey].length > 0) {
+    if (typeof body[firstKey][0] === 'string') {
+      return `${firstKey}: ${body[firstKey][0]}`;
+    }
   }
 
   return 'Request failed';
