@@ -61,6 +61,7 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({ detail: 'Request failed' }));
+    console.error('API Error Response:', errorBody); // Debug log
     const message = getErrorMessage(errorBody);
 
     if (
