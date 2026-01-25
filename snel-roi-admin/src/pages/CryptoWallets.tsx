@@ -410,6 +410,7 @@ export default function CryptoWallets() {
                     <TableHead>Type</TableHead>
                     <TableHead>Network</TableHead>
                     <TableHead>Address</TableHead>
+                    <TableHead>QR</TableHead>
                     <TableHead>Min.</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -421,6 +422,15 @@ export default function CryptoWallets() {
                       <TableCell className="font-bold">{wallet.crypto_type_display}</TableCell>
                       <TableCell>{wallet.network_display}</TableCell>
                       <TableCell className="font-mono text-xs">{wallet.wallet_address.substring(0, 10)}...{wallet.wallet_address.substring(wallet.wallet_address.length - 10)}</TableCell>
+                      <TableCell>
+                        {wallet.qr_code_url ? (
+                          <div className="w-8 h-8 rounded overflow-hidden border border-border">
+                            <img src={wallet.qr_code_url} alt="QR" className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>${wallet.min_deposit}</TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm" onClick={() => handleToggleWallet(wallet.id)} className="h-8 p-0">
