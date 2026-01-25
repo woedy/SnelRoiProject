@@ -10,4 +10,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend /app
 
+# Collect static files during build
+RUN python manage.py collectstatic --noinput
+
 CMD ["gunicorn", "banking.wsgi:application", "--bind", "0.0.0.0:8000"]
