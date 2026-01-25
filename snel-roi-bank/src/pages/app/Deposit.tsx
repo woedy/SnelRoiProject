@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
@@ -32,6 +32,7 @@ interface CryptoDeposit {
 }
 
 const Deposit = () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useLanguage();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -565,14 +566,19 @@ const Deposit = () => {
                 <Label className="text-sm font-medium">Upload Proof Of Payment</Label>
                 <div 
                   className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${proofFile ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/10' : 'border-border hover:border-primary cursor-pointer'}`}
-                  onClick={() => document.getElementById('proof-upload')?.click()}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <input 
+                    ref={fileInputRef}
                     type="file" 
-                    id="proof-upload" 
                     className="hidden" 
                     accept="image/*"
-                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setProofFile(e.target.files[0]);
+                      }
+                      e.target.value = '';
+                    }}
                   />
                   {proofFile ? (
                     <div className="flex flex-col items-center">
