@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Receipt } from '@/components/Receipt';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, getErrorMessage } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { Building2, CreditCard, Smartphone, ChevronRight, ArrowLeft, Bitcoin, DollarSign, Wallet, Copy, Check, Upload, Info, ExternalLink, Lock } from 'lucide-react';
 
@@ -198,7 +198,7 @@ const Deposit = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Upload failed');
+        throw new Error(getErrorMessage(errorData));
       }
 
       setStep('success');
