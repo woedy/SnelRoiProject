@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api";
+import { Account } from "./accountService";
 
 export interface User {
     id: number;
@@ -8,6 +9,7 @@ export interface User {
     is_staff: boolean;
     is_superuser: boolean;
     full_name?: string;
+    accounts?: Account[];
 }
 
 export const userService = {

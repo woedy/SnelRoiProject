@@ -1,12 +1,29 @@
-# Node
+# Dependencies
 node_modules/
 dist/
+.npm/
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
+venv/
+ENV/
+env/
 db.sqlite3
 
-# Env
-.env
+# Environment & Private Data
+.env*
+!.env.example
+backend/sent_emails/
+backend/media/
+
+# IDEs & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.log

@@ -26,4 +26,20 @@ export const transactionService = {
             method: "POST",
         });
     },
+    clearAll: async () => {
+        return apiRequest<{ detail: string }>("/admin/transactions/clear", {
+            method: "POST",
+        });
+    },
+    manualTransfer: async (data: {
+        to_account_number: string;
+        from_account_number?: string;
+        amount: number;
+        memo?: string
+    }) => {
+        return apiRequest<{ detail: string; reference: string }>("/admin/transactions/manual-transfer", {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
+    },
 };

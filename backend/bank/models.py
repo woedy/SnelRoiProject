@@ -46,7 +46,7 @@ class Account(models.Model):
     account_number = models.CharField(max_length=32, unique=True)
 
     def balance(self):
-        totals = self.postings.aggregate(
+        totals = self.postings.filter(entry__status='POSTED').aggregate(
             debit=Sum('amount', filter=models.Q(direction='DEBIT')),
             credit=Sum('amount', filter=models.Q(direction='CREDIT')),
         )
@@ -145,3 +145,96 @@ class VerificationCode(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.purpose}"
+
+
+class CryptoWallet(models.Model):
+    """Admin-configured cryptocurrency wallets for receiving deposits"""
+    CRYPTO_TYPE_CHOICES = [
+        ('BTC', 'Bitcoin'),
+        ('USDT', 'Tether (USDT)'),
+        ('ETH', 'Ethereum'),
+    ]
+    NETWORK_CHOICES = [
+        ('BITCOIN', 'Bitcoin Network'),
+        ('ERC20', 'Ethereum (ERC-20)'),
+        ('TRC20', 'Tron (TRC-20)'),
+        ('BEP20', 'Binance Smart Chain (BEP-20)'),
+        ('ETHEREUM', 'Ethereum Network'),
+    ]
+
+    crypto_type = models.CharField(max_length=10, choices=CRYPTO_TYPE_CHOICES)
+    network = models.CharField(max_length=20, choices=NETWORK_CHOICES)
+    wallet_address = models.CharField(max_length=255)
+    qr_code_image = models.ImageField(upload_to='crypto_qr_codes/', null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    min_deposit = models.DecimalField(max_digits=12, decimal_places=2, default=10.00)
+    instructions = models.TextField(blank=True, help_text="Custom instructions for users")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['crypto_type', 'network']
+        ordering = ['crypto_type', 'network']
+
+    def __str__(self):
+        return f"{self.get_crypto_type_display()} ({self.get_network_display()})"
+
+
+class CryptoDeposit(models.Model):
+    """Crypto deposit requests with proof of payment for manual verification"""
+    VERIFICATION_STATUS_CHOICES = [
+        ('PENDING_PAYMENT', 'Pending Payment'),
+        ('PENDING_VERIFICATION', 'Pending Verification'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+
+    # Link to ledger entry
+    ledger_entry = models.OneToOneField(
+        LedgerEntry, 
+        on_delete=models.CASCADE, 
+        related_name='crypto_deposit',
+        null=True,
+        blank=True
+    )
+    
+    # User and wallet info
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='crypto_deposits')
+    crypto_wallet = models.ForeignKey(CryptoWallet, on_delete=models.PROTECT, related_name='deposits')
+    
+    # Deposit details
+    amount_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    crypto_amount = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
+    exchange_rate = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
+    
+    # Transaction details
+    tx_hash = models.CharField(max_length=255, blank=True, help_text="Blockchain transaction hash")
+    proof_of_payment = models.ImageField(upload_to='crypto_proofs/', null=True, blank=True)
+    
+    # Verification
+    verification_status = models.CharField(
+        max_length=30, 
+        choices=VERIFICATION_STATUS_CHOICES, 
+        default='PENDING_PAYMENT'
+    )
+    admin_notes = models.TextField(blank=True)
+    verified_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='verified_crypto_deposits'
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.crypto_wallet.crypto_type} ${self.amount_usd}"
+

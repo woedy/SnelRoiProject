@@ -3,7 +3,7 @@ import { apiRequest } from '@/lib/api';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  user: { id: number; email: string; username: string; is_staff: boolean } | null;
+  user: { id: number; email: string; username: string; is_staff: boolean; is_active: boolean } | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName: string) => Promise<string>;
   verifyEmail: (email: string, code: string) => Promise<void>;

@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -28,6 +28,12 @@ from .serializers import (
     RegisterSerializer,
     StatementSerializer,
     UserSerializer,
+    CryptoWalletSerializer,
+    CryptoWalletPublicSerializer,
+    CryptoDepositSerializer,
+    CryptoDepositCreateSerializer,
+    CryptoDepositProofUploadSerializer,
+    CryptoDepositVerificationSerializer,
 )
 from .services import (
     add_posting,
@@ -48,7 +54,10 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         verification_code = create_verification_code(user, 'EMAIL_VERIFICATION')
-        send_verification_email(user, verification_code.code)
+        
+        from .emails import send_verification_email
+        send_verification_email.delay(user.id, verification_code.code)
+        
         return Response({
             'detail': 'Verification code sent to your email.',
             'email': user.email,
@@ -151,7 +160,8 @@ class ResendVerificationView(APIView):
         user = User.objects.filter(email=email).first()
         if user and not user.is_active:
             verification_code = create_verification_code(user, 'EMAIL_VERIFICATION')
-            send_verification_email(user, verification_code.code)
+            from .emails import send_verification_email
+            send_verification_email.delay(user.id, verification_code.code)
 
         return Response({'detail': 'If the email exists, a verification code has been sent.'})
 
@@ -168,7 +178,8 @@ class PasswordResetRequestView(APIView):
         user = User.objects.filter(email=email).first()
         if user:
             reset_code = create_verification_code(user, 'PASSWORD_RESET')
-            send_password_reset_email(user, reset_code.code)
+            from .emails import send_password_reset_email
+            send_password_reset_email.delay(user.id, reset_code.code)
 
         return Response({'detail': 'If the email exists, a reset code has been sent.'})
 
@@ -222,6 +233,15 @@ class DashboardView(APIView):
         has_frozen_account = frozen_accounts.exists()
         frozen_account_numbers = list(frozen_accounts.values_list('account_number', flat=True))
         entries = LedgerEntry.objects.filter(postings__account__customer=profile).distinct().order_by('-created_at')[:5]
+        
+        # Include unsettled crypto deposits (pending & rejected)
+        from .models import CryptoDeposit
+        from .serializers import CryptoDepositSerializer
+        unsettled_crypto = CryptoDeposit.objects.filter(
+            customer=profile, 
+            verification_status__in=['PENDING_PAYMENT', 'PENDING_VERIFICATION', 'REJECTED']
+        ).order_by('-created_at')[:5]
+        
         total_balance = sum([account.balance() for account in accounts_qs])
         last_30_days = timezone.now() - timedelta(days=30)
         summary = LedgerPosting.objects.filter(
@@ -234,11 +254,12 @@ class DashboardView(APIView):
         return Response({
             'accounts': accounts,
             'recent_transactions': LedgerEntrySerializer(entries, many=True).data,
+            'unsettled_crypto_deposits': CryptoDepositSerializer(unsettled_crypto, many=True).data,
             'total_balance': total_balance,
             'account_status': {
                 'has_frozen_account': has_frozen_account,
                 'frozen_account_numbers': frozen_account_numbers,
-                'message': 'One or more accounts are frozen. Please contact customer care.' if has_frozen_account else None
+                'message': f"Account Frozen: Your account {frozen_account_numbers[0]} has been frozen. Please contact customer care at banking@snelroi.com to resolve this issue." if has_frozen_account else None
             },
             'insights': {
                 'debits_last_30_days': summary['debits'] or 0,
@@ -265,7 +286,19 @@ class TransactionsView(APIView):
         entry_type = request.query_params.get('type')
         if entry_type:
             entries = entries.filter(entry_type=entry_type)
-        return Response(LedgerEntrySerializer(entries, many=True).data)
+        
+        # Include unsettled crypto deposits (pending & rejected)
+        from .models import CryptoDeposit
+        from .serializers import CryptoDepositSerializer
+        unsettled_crypto = CryptoDeposit.objects.filter(
+            customer=profile, 
+            verification_status__in=['PENDING_PAYMENT', 'PENDING_VERIFICATION', 'REJECTED']
+        ).order_by('-created_at')
+
+        return Response({
+            'transactions': LedgerEntrySerializer(entries, many=True).data,
+            'unsettled_crypto_deposits': CryptoDepositSerializer(unsettled_crypto, many=True).data
+        })
 
 
 class DepositView(APIView):
@@ -300,6 +333,11 @@ class TransferView(APIView):
         entry = create_entry('TRANSFER', request.user, memo=memo)
         add_posting(entry, account, 'DEBIT', amount, 'Transfer out')
         add_posting(entry, recipient, 'CREDIT', amount, 'Transfer in')
+        
+        # Notify recipient
+        from .emails import send_transfer_received_email
+        send_transfer_received_email.delay(recipient.customer.user.id, amount, f"User {request.user.email}", memo)
+        
         return Response(LedgerEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
@@ -395,6 +433,11 @@ class AdminTransactionApproveView(APIView):
     def post(self, request, pk):
         entry = LedgerEntry.objects.get(pk=pk)
         approve_entry(entry, request.user)
+        
+        # Notify user
+        from .emails import send_transaction_status_email
+        send_transaction_status_email.delay(entry.id, 'APPROVED')
+        
         return Response(AdminLedgerEntrySerializer(entry).data)
 
 
@@ -404,6 +447,11 @@ class AdminTransactionDeclineView(APIView):
     def post(self, request, pk):
         entry = LedgerEntry.objects.get(pk=pk)
         decline_entry(entry, request.user)
+        
+        # Notify user
+        from .emails import send_transaction_status_email
+        send_transaction_status_email.delay(entry.id, 'DECLINED')
+        
         return Response(AdminLedgerEntrySerializer(entry).data)
 
 
@@ -478,9 +526,17 @@ class AdminAccountDetailView(APIView):
         account = self.get_object(pk)
         serializer = AdminAccountUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        old_status = account.status
         for field, value in serializer.validated_data.items():
             setattr(account, field, value)
         account.save()
+        print(f"DEBUG: AdminAccountDetailView.patch triggered for {account.account_number}")
+
+        # Notify user if status changed
+        if 'status' in serializer.validated_data and serializer.validated_data['status'] != old_status:
+            from .emails import send_account_status_email
+            send_account_status_email.delay(account.id, serializer.validated_data['status'])
+            
         return Response(AdminAccountSerializer(account).data)
 
 
@@ -543,6 +599,11 @@ class FreezeAccountView(APIView):
         account.status = 'FROZEN'
         account.save(update_fields=['status'])
         
+        print(f"DEBUG: FreezeAccountView triggered for {account_number}")
+        # Notify user
+        from .emails import send_account_status_email
+        send_account_status_email.delay(account.id, 'FROZEN')
+        
         return Response({'detail': f'Account {account_number} has been frozen'}, status=status.HTTP_200_OK)
 
 
@@ -566,4 +627,316 @@ class UnfreezeAccountView(APIView):
         account.status = 'ACTIVE'
         account.save(update_fields=['status'])
         
+        print(f"DEBUG: UnfreezeAccountView triggered for {account_number}")
+        # Notify user
+        from .emails import send_account_status_email
+        send_account_status_email.delay(account.id, 'ACTIVE')
+        
         return Response({'detail': f'Account {account_number} has been unfrozen'}, status=status.HTTP_200_OK)
+
+
+# ============ Crypto Deposit Views ============
+
+class CryptoWalletsPublicView(APIView):
+    """Public endpoint to list active crypto wallets"""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        wallets = CryptoWallet.objects.filter(is_active=True)
+        serializer = CryptoWalletPublicSerializer(wallets, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class CryptoDepositInitiateView(APIView):
+    """Initiate a crypto deposit"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = CryptoDepositCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        profile = request.user.profile
+        wallet = CryptoWallet.objects.get(id=serializer.validated_data['crypto_wallet_id'])
+
+        # Create crypto deposit
+        crypto_deposit = CryptoDeposit.objects.create(
+            customer=profile,
+            crypto_wallet=wallet,
+            amount_usd=serializer.validated_data['amount_usd'],
+            crypto_amount=serializer.validated_data.get('crypto_amount'),
+            exchange_rate=serializer.validated_data.get('exchange_rate'),
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+
+        response_serializer = CryptoDepositSerializer(crypto_deposit, context={'request': request})
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class CryptoDepositUploadProofView(APIView):
+    """Upload proof of payment for a crypto deposit"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            crypto_deposit = CryptoDeposit.objects.get(pk=pk, customer=request.user.profile)
+        except CryptoDeposit.DoesNotExist:
+            return Response({'detail': 'Crypto deposit not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if crypto_deposit.verification_status != 'PENDING_PAYMENT':
+            return Response(
+                {'detail': 'Cannot upload proof for this deposit'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = CryptoDepositProofUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        crypto_deposit.proof_of_payment = serializer.validated_data['proof_of_payment']
+        crypto_deposit.tx_hash = serializer.validated_data.get('tx_hash', '')
+        crypto_deposit.verification_status = 'PENDING_VERIFICATION'
+        crypto_deposit.save()
+
+        response_serializer = CryptoDepositSerializer(crypto_deposit, context={'request': request})
+        return Response(response_serializer.data)
+
+
+class CryptoDepositStatusView(APIView):
+    """Check status of a crypto deposit"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            crypto_deposit = CryptoDeposit.objects.get(pk=pk, customer=request.user.profile)
+        except CryptoDeposit.DoesNotExist:
+            return Response({'detail': 'Crypto deposit not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = CryptoDepositSerializer(crypto_deposit, context={'request': request})
+        return Response(serializer.data)
+
+
+class UserCryptoDepositsView(APIView):
+    """List user's crypto deposits"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        deposits = CryptoDeposit.objects.filter(customer=request.user.profile)
+        serializer = CryptoDepositSerializer(deposits, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+# ============ Admin Crypto Views ============
+
+class AdminCryptoWalletsView(APIView):
+    """Admin endpoint to manage crypto wallets"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        wallets = CryptoWallet.objects.all()
+        serializer = CryptoWalletSerializer(wallets, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = CryptoWalletSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        wallet = serializer.save()
+        return Response(CryptoWalletSerializer(wallet, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+
+class AdminCryptoWalletDetailView(APIView):
+    """Admin endpoint for wallet detail operations"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        try:
+            return CryptoWallet.objects.get(pk=pk)
+        except CryptoWallet.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        wallet = self.get_object(pk)
+        if not wallet:
+            return Response({'detail': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CryptoWalletSerializer(wallet, context={'request': request})
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        wallet = self.get_object(pk)
+        if not wallet:
+            return Response({'detail': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CryptoWalletSerializer(wallet, data=request.data, partial=True, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        wallet = serializer.save()
+        return Response(CryptoWalletSerializer(wallet, context={'request': request}).data)
+
+    def delete(self, request, pk):
+        wallet = self.get_object(pk)
+        if not wallet:
+            return Response({'detail': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+        wallet.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminCryptoWalletToggleView(APIView):
+    """Toggle wallet active status"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+            wallet = CryptoWallet.objects.get(pk=pk)
+        except CryptoWallet.DoesNotExist:
+            return Response({'detail': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        wallet.is_active = not wallet.is_active
+        wallet.save()
+        serializer = CryptoWalletSerializer(wallet, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminCryptoDepositsView(APIView):
+    """Admin endpoint to view all crypto deposits"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        status_filter = request.query_params.get('status')
+        deposits = CryptoDeposit.objects.all()
+        if status_filter:
+            deposits = deposits.filter(verification_status=status_filter)
+        serializer = CryptoDepositSerializer(deposits, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminCryptoDepositVerifyView(APIView):
+    """Admin endpoint to verify/reject crypto deposits"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+            crypto_deposit = CryptoDeposit.objects.get(pk=pk)
+        except CryptoDeposit.DoesNotExist:
+            return Response({'detail': 'Crypto deposit not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if crypto_deposit.verification_status != 'PENDING_VERIFICATION':
+            return Response(
+                {'detail': 'Deposit is not pending verification'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = CryptoDepositVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        action = serializer.validated_data['action']
+        admin_notes = serializer.validated_data.get('admin_notes', '')
+
+        if action == 'approve':
+            # Create ledger entry for the deposit
+            account = crypto_deposit.customer.accounts.filter(status='ACTIVE').first()
+            if not account:
+                return Response(
+                    {'detail': 'Customer has no active account'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            funding, _ = get_system_accounts()
+            entry = create_entry('DEPOSIT', request.user, memo=f'Crypto deposit - {crypto_deposit.crypto_wallet.crypto_type}')
+            add_posting(entry, account, 'CREDIT', crypto_deposit.amount_usd, f'Crypto deposit ({crypto_deposit.crypto_wallet.crypto_type})')
+            add_posting(entry, funding, 'DEBIT', crypto_deposit.amount_usd, 'Crypto funding')
+
+            # Approve the entry immediately
+            approve_entry(entry, request.user)
+
+            # Update crypto deposit
+            crypto_deposit.ledger_entry = entry
+            crypto_deposit.verification_status = 'APPROVED'
+            crypto_deposit.verified_by = request.user
+            crypto_deposit.verified_at = timezone.now()
+            crypto_deposit.admin_notes = admin_notes
+            crypto_deposit.save()
+
+            # Notify user
+            from .emails import send_crypto_approval_email
+            send_crypto_approval_email.delay(crypto_deposit.id)
+
+        elif action == 'reject':
+            crypto_deposit.verification_status = 'REJECTED'
+            crypto_deposit.verified_by = request.user
+            crypto_deposit.verified_at = timezone.now()
+            crypto_deposit.admin_notes = admin_notes
+            crypto_deposit.save()
+
+            # Notify user
+            from .emails import send_crypto_rejection_email
+            send_crypto_rejection_email.delay(crypto_deposit.id, admin_notes)
+
+        response_serializer = CryptoDepositSerializer(crypto_deposit, context={'request': request})
+        return Response(response_serializer.data)
+
+
+class AdminClearTransactionsView(APIView):
+    """Admin endpoint to purge all transaction history for a fresh start"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        # Transactional deletion for safety
+        from django.db import transaction
+        from .models import LedgerEntry, LedgerPosting, CryptoDeposit
+        
+        with transaction.atomic():
+            LedgerPosting.objects.all().delete()
+            LedgerEntry.objects.all().delete()
+            CryptoDeposit.objects.all().delete()
+            
+        return Response({'detail': 'All transactions and crypto records have been cleared successfully.'})
+
+
+class AdminManualTransferView(APIView):
+    """Admin endpoint to manually transfer funds to a user account"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        from .serializers import AdminManualTransferSerializer
+        from .services import create_entry, add_posting, approve_entry, get_system_accounts
+        from .models import Account
+        from django.db import transaction
+        
+        serializer = AdminManualTransferSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        data = serializer.validated_data
+        to_account = Account.objects.get(account_number=data['to_account_number'])
+        amount = data['amount']
+        
+        # User requested source field to be free-text/label
+        source_label = data.get('from_account_number', '').strip()
+        memo = data.get('memo', '').strip() or f"Manual Credit"
+        
+        # Financial source is always the System Funding account
+        funding, _ = get_system_accounts()
+        from_account = funding
+        
+        # Combine memo and source label for a clear history
+        # e.g. "Deposit correction (Source: Bank of America)"
+        full_memo = memo
+        if source_label:
+            full_memo = f"{memo} (Source: {source_label})"
+
+        with transaction.atomic():
+            entry = create_entry('TRANSFER', request.user, memo=full_memo)
+            
+            # Credit recipient
+            add_posting(entry, to_account, 'CREDIT', amount, f"Manual credit: {memo}")
+            
+            # Debit system funding (the source of the new balance)
+            add_posting(entry, from_account, 'DEBIT', amount, f"System disbursement: {source_label or 'Admin Adjustment'}")
+            
+            # Auto-approve the manual entry
+            approve_entry(entry, request.user)
+            
+            # Notify recipient
+            from .emails import send_transfer_received_email
+            send_transfer_received_email.delay(to_account.customer.user.id, amount, source_label or "System Funding", memo)
+            
+        return Response({
+            'detail': f'Successfully transferred ${amount} to {to_account.account_number}',
+            'reference': entry.reference
+        })
+

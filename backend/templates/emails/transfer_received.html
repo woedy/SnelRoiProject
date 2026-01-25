@@ -1,0 +1,27 @@
+{% extends 'emails/base.html' %}
+
+{% block content %}
+<p>Hello {{ user.first_name|default:user.username }},</p>
+
+<p>You have received a new transfer.</p>
+
+<div class="alert alert-warning" style="text-align: center;">
+    <span style="font-size: 24px; font-weight: 600; display: block;">${{ amount }}</span>
+    <span style="font-size: 14px; color: #1e40af;">Funds Available</span>
+</div>
+
+<table class="info-table">
+    <tr>
+        <td>From</td>
+        <td>{{ from_desc }}</td>
+    </tr>
+    {% if memo %}
+    <tr>
+        <td>Memo</td>
+        <td>{{ memo }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<a href="https://snelroi.com/dashboard" class="button">View Balance</a>
+{% endblock %}

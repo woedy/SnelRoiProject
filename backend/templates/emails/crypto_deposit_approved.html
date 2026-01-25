@@ -1,0 +1,25 @@
+{% extends 'emails/base.html' %}
+
+{% block content %}
+<p>Hello {{ user.first_name|default:user.username }},</p>
+
+<p>Your crypto deposit has been <strong>verified and approved</strong>.</p>
+
+<div class="alert alert-warning">
+    <strong>+ ${{ amount_usd }} USD</strong><br>
+    Funds have been credited to your account.
+</div>
+
+<table class="info-table">
+    <tr>
+        <td>Wallet Type</td>
+        <td>{{ wallet_type }}</td>
+    </tr>
+    <tr>
+        <td>Credited Amount</td>
+        <td>${{ amount_usd }}</td>
+    </tr>
+</table>
+
+<a href="https://snelroi.com/dashboard" class="button">View Dashboard</a>
+{% endblock %}

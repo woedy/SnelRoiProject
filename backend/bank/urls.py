@@ -25,7 +25,24 @@ urlpatterns = [
     path('beneficiaries', views.BeneficiariesView.as_view()),
     path('accounts/freeze', views.FreezeAccountView.as_view()),
     path('accounts/unfreeze', views.UnfreezeAccountView.as_view()),
+    
+    # Crypto Deposit Endpoints
+    path('crypto-wallets', views.CryptoWalletsPublicView.as_view()),
+    path('deposits/crypto', views.UserCryptoDepositsView.as_view()),
+    path('deposits/crypto/initiate', views.CryptoDepositInitiateView.as_view()),
+    path('deposits/crypto/<int:pk>/upload-proof', views.CryptoDepositUploadProofView.as_view()),
+    path('deposits/crypto/<int:pk>/status', views.CryptoDepositStatusView.as_view()),
+
+    # Admin Crypto Endpoints
+    path('admin/crypto-wallets', views.AdminCryptoWalletsView.as_view()),
+    path('admin/crypto-wallets/<int:pk>', views.AdminCryptoWalletDetailView.as_view()),
+    path('admin/crypto-wallets/<int:pk>/toggle', views.AdminCryptoWalletToggleView.as_view()),
+    path('admin/crypto-deposits', views.AdminCryptoDepositsView.as_view()),
+    path('admin/crypto-deposits/<int:pk>/verify', views.AdminCryptoDepositVerifyView.as_view()),
+
     path('admin/transactions', views.AdminTransactionsView.as_view()),
+    path('admin/transactions/clear', views.AdminClearTransactionsView.as_view()),
+    path('admin/transactions/manual-transfer', views.AdminManualTransferView.as_view()),
     path('admin/transactions/<int:pk>', views.AdminTransactionDetailView.as_view()),
     path('admin/transactions/<int:pk>/approve', views.AdminTransactionApproveView.as_view()),
     path('admin/transactions/<int:pk>/decline', views.AdminTransactionDeclineView.as_view()),

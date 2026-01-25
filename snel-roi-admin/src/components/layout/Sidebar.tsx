@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +7,7 @@ const sidebarItems = [
   { icon: Users, label: "Users", href: "/users" },
   { icon: Wallet, label: "Accounts", href: "/accounts" },
   { icon: CreditCard, label: "Transactions", href: "/transactions" },
+  { icon: Bitcoin, label: "Crypto Wallets", href: "/crypto-wallets" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 

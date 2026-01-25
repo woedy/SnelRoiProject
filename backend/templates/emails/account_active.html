@@ -1,0 +1,16 @@
+{% extends 'emails/base.html' %}
+
+{% block content %}
+<p>Hello {{ user.first_name|default:user.username }},</p>
+
+<p>Great news! Your account <strong>{{ account_number }}</strong> is now <strong>ACTIVE</strong>.</p>
+
+<div class="alert alert-warning">
+    <strong>Status: ACTIVE</strong><br>
+    You can now resume all regular banking activities, including transfers and deposits.
+</div>
+
+<p>Thank you for your patience and for banking with SnelROI.</p>
+
+<a href="https://snelroi.com/dashboard" class="button">Go to Dashboard</a>
+{% endblock %}
