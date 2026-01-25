@@ -245,7 +245,10 @@ class CryptoWalletSerializer(serializers.ModelSerializer):
         if obj.qr_code_image:
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.qr_code_image.url)
+                url = request.build_absolute_uri(obj.qr_code_image.url)
+                if not settings.DEBUG and url.startswith('http://'):
+                    url = url.replace('http://', 'https://', 1)
+                return url
         return None
 
 
@@ -266,7 +269,11 @@ class CryptoWalletPublicSerializer(serializers.ModelSerializer):
         if obj.qr_code_image:
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.qr_code_image.url)
+                url = request.build_absolute_uri(obj.qr_code_image.url)
+                # Force HTTPS in production if behind proxy
+                if not settings.DEBUG and url.startswith('http://'):
+                    url = url.replace('http://', 'https://', 1)
+                return url
         return None
 
 
