@@ -18,7 +18,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.login': 'Log in',
     'nav.register': 'Open Account',
     'nav.dashboard': 'Dashboard',
-    'nav.deposit': 'Deposit',
+    'nav.deposit': 'Add Money',
     'nav.transfer': 'Transfer',
     'nav.withdraw': 'Withdraw',
     'nav.statements': 'Statements',
@@ -86,8 +86,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.business': 'Business Account',
     'dashboard.quickActions': 'Quick Actions',
     'dashboard.recentTransactions': 'Recent Transactions',
+    'dashboard.seeAll': 'See All',
+    'dashboard.insights': 'Insights',
+    'dashboard.debits': 'Debits (last 30 days)',
+    'dashboard.credits': 'Credits (last 30 days)',
     'dashboard.viewAll': 'View All',
-    'dashboard.insights': 'Spending Insights',
+    'dashboard.spendingInsights': 'Spending Insights',
     'dashboard.virtualCard': 'Virtual Card',
     'dashboard.virtualCardDetails': 'Card Details',
     'dashboard.virtualCardMonthlyLimit': 'Monthly Limit',
@@ -98,12 +102,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.virtualCardFrozen': 'Frozen',
     'dashboard.virtualCardReveal': 'Reveal',
     'dashboard.virtualCardHide': 'Hide',
+    'dashboard.virtualCardCopy': 'Copy Details',
     'dashboard.virtualCardCopyNumber': 'Copy number',
     'dashboard.virtualCardCopyCvv': 'Copy CVV',
     'dashboard.virtualCardEmpty': 'No virtual cards available.',
 
     // Transactions
-    'transaction.deposit': 'Deposit',
+    'transaction.deposit': 'Add Money',
     'transaction.transfer': 'Transfer',
     'transaction.withdraw': 'Withdraw',
     'transaction.payment': 'Payment',
@@ -117,7 +122,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'transaction.failed': 'Failed',
 
     // Actions
-    'action.deposit': 'Deposit Funds',
+    'action.deposit': 'Add Money',
     'action.transfer': 'Send Money',
     'action.withdraw': 'Withdraw',
     'action.continue': 'Continue',
@@ -130,13 +135,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'action.edit': 'Edit',
 
     // Deposit
-    'deposit.title': 'Deposit Funds',
+    'deposit.title': 'Add Money',
     'deposit.method': 'Select deposit method',
     'deposit.bankTransfer': 'Bank Transfer',
     'deposit.card': 'Debit/Credit Card',
     'deposit.mobile': 'Mobile Money',
     'deposit.amount': 'Enter amount',
-    'deposit.success': 'Deposit Successful!',
+    'deposit.success': 'Money Added Successfully!',
     'deposit.reference': 'Reference Number',
 
     // Transfer
@@ -164,6 +169,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'statements.download': 'Download PDF',
     'statements.view': 'View Statement',
     'statements.year': 'Year',
+    'statements.generate': 'Generate Statement',
+    'statements.generated': 'Statement generated successfully.',
+    'statements.pending': 'Pending',
 
     // Profile
     'profile.title': 'Your Profile',
@@ -277,8 +285,49 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Contact Sales',
     'cta.disclaimer': 'No credit check required • Free for personal use • Cancel anytime',
 
-    // Common Extended
-    'common.learnMore': 'Learn more',
+    // Common
+    'common.amount': 'Amount',
+    'common.error': 'Error',
+    'common.processing': 'Processing...',
+    'common.confirm': 'Confirm',
+    'common.cancel': 'Cancel',
+    'common.businessDays': 'business days',
+    'common.date': 'Date',
+    'common.success': 'Success',
+    'common.learnMore': 'Learn More',
+
+    // External Transfer
+    'externalTransfer.title': 'External Transfer',
+    'externalTransfer.subtitle': 'Send to other banks',
+    'externalTransfer.recipientDetails': 'Enter recipient bank details',
+    'externalTransfer.transferAmount': 'Enter transfer amount',
+    'externalTransfer.confirmTransfer': 'Confirm external transfer',
+    'externalTransfer.requiredFields': 'All required fields must be completed',
+    'externalTransfer.bankDetails': 'Bank Account Details',
+    'externalTransfer.secureTransfer': 'Secure external transfer',
+    'externalTransfer.recipientName': 'Recipient Name',
+    'externalTransfer.bankName': 'Bank Name',
+    'externalTransfer.accountNumber': 'Account Number',
+    'externalTransfer.routingNumber': 'Routing Number',
+    'externalTransfer.accountType': 'Account Type',
+    'externalTransfer.checking': 'Checking',
+    'externalTransfer.savings': 'Savings',
+    'externalTransfer.country': 'Country',
+    'externalTransfer.swiftCode': 'SWIFT Code',
+    'externalTransfer.external': 'External',
+    'externalTransfer.externalBank': 'External Bank',
+    'externalTransfer.importantInfo': 'Important Information',
+    'externalTransfer.processingTime': 'Processing Time',
+    'externalTransfer.transferFee': 'Transfer Fee',
+    'externalTransfer.minimum': 'minimum',
+    'externalTransfer.notePlaceholder': 'Add a note for the recipient (optional)',
+    'externalTransfer.transferSummary': 'Transfer Summary',
+    'externalTransfer.totalAmount': 'Total Amount',
+    'externalTransfer.confirmDetails': 'Confirm Transfer Details',
+    'externalTransfer.recipient': 'Recipient',
+    'externalTransfer.bank': 'Bank',
+    'externalTransfer.account': 'Account',
+    'externalTransfer.success': 'External Transfer Successful',
 
     // Security Page
     'security.pageTitle': 'Your Security is Our Priority',
@@ -489,7 +538,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.login': 'Anmelden',
     'nav.register': 'Konto eröffnen',
     'nav.dashboard': 'Dashboard',
-    'nav.deposit': 'Einzahlung',
+    'nav.deposit': 'Geld hinzufügen',
     'nav.transfer': 'Überweisung',
     'nav.withdraw': 'Auszahlung',
     'nav.statements': 'Kontoauszüge',
@@ -568,12 +617,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.virtualCardFrozen': 'Gesperrt',
     'dashboard.virtualCardReveal': 'Anzeigen',
     'dashboard.virtualCardHide': 'Verbergen',
+    'dashboard.virtualCardCopy': 'Details kopieren',
     'dashboard.virtualCardCopyNumber': 'Nummer kopieren',
     'dashboard.virtualCardCopyCvv': 'CVV kopieren',
     'dashboard.virtualCardEmpty': 'Keine virtuellen Karten verfügbar.',
 
     // Transactions
-    'transaction.deposit': 'Einzahlung',
+    'transaction.deposit': 'Geld hinzufügen',
     'transaction.transfer': 'Überweisung',
     'transaction.withdraw': 'Auszahlung',
     'transaction.payment': 'Zahlung',
@@ -587,7 +637,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'transaction.failed': 'Fehlgeschlagen',
 
     // Actions
-    'action.deposit': 'Geld einzahlen',
+    'action.deposit': 'Geld hinzufügen',
     'action.transfer': 'Geld senden',
     'action.withdraw': 'Auszahlen',
     'action.continue': 'Weiter',
@@ -600,13 +650,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'action.edit': 'Bearbeiten',
 
     // Deposit
-    'deposit.title': 'Geld einzahlen',
+    'deposit.title': 'Geld hinzufügen',
     'deposit.method': 'Einzahlungsmethode wählen',
     'deposit.bankTransfer': 'Banküberweisung',
     'deposit.card': 'Debit-/Kreditkarte',
     'deposit.mobile': 'Mobile Zahlung',
     'deposit.amount': 'Betrag eingeben',
-    'deposit.success': 'Einzahlung erfolgreich!',
+    'deposit.success': 'Geld erfolgreich hinzugefügt!',
     'deposit.reference': 'Referenznummer',
 
     // Transfer
@@ -634,6 +684,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'statements.download': 'PDF herunterladen',
     'statements.view': 'Auszug anzeigen',
     'statements.year': 'Jahr',
+    'statements.generate': 'Auszug erstellen',
+    'statements.generated': 'Kontoauszug erfolgreich erstellt.',
+    'statements.pending': 'Ausstehend',
 
     // Profile
     'profile.title': 'Ihr Profil',
@@ -747,7 +800,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Vertrieb kontaktieren',
     'cta.disclaimer': 'Keine Kreditprüfung erforderlich • Kostenlos für die private Nutzung • Jederzeit kündbar',
 
-    // Common Extended
+    // Common
+    'common.amount': 'Betrag',
+    'common.error': 'Fehler',
+    'common.processing': 'Verarbeitung...',
+    'common.confirm': 'Bestätigen',
+    'common.cancel': 'Abbrechen',
+    'common.success': 'Erfolg',
     'common.learnMore': 'Mehr erfahren',
 
     // Security Page
@@ -959,7 +1018,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.login': 'Iniciar sesión',
     'nav.register': 'Abrir cuenta',
     'nav.dashboard': 'Panel',
-    'nav.deposit': 'Depositar',
+    'nav.deposit': 'Agregar dinero',
     'nav.transfer': 'Transferir',
     'nav.withdraw': 'Retirar',
     'nav.statements': 'Extractos',
@@ -1038,12 +1097,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.virtualCardFrozen': 'Congelada',
     'dashboard.virtualCardReveal': 'Mostrar',
     'dashboard.virtualCardHide': 'Ocultar',
+    'dashboard.virtualCardCopy': 'Copiar detalles',
     'dashboard.virtualCardCopyNumber': 'Copiar número',
     'dashboard.virtualCardCopyCvv': 'Copiar CVV',
     'dashboard.virtualCardEmpty': 'No hay tarjetas virtuales disponibles.',
 
     // Transactions
-    'transaction.deposit': 'Depósito',
+    'transaction.deposit': 'Agregar dinero',
     'transaction.transfer': 'Transferencia',
     'transaction.withdraw': 'Retiro',
     'transaction.payment': 'Pago',
@@ -1057,7 +1117,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'transaction.failed': 'Fallido',
 
     // Actions
-    'action.deposit': 'Depositar fondos',
+    'action.deposit': 'Agregar dinero',
     'action.transfer': 'Enviar dinero',
     'action.withdraw': 'Retirar',
     'action.continue': 'Continuar',
@@ -1070,13 +1130,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'action.edit': 'Editar',
 
     // Deposit
-    'deposit.title': 'Depositar fondos',
+    'deposit.title': 'Agregar dinero',
     'deposit.method': 'Seleccionar método',
     'deposit.bankTransfer': 'Transferencia bancaria',
     'deposit.card': 'Tarjeta de débito/crédito',
     'deposit.mobile': 'Dinero móvil',
     'deposit.amount': 'Ingresa el monto',
-    'deposit.success': '¡Depósito exitoso!',
+    'deposit.success': '¡Dinero agregado exitosamente!',
     'deposit.reference': 'Número de referencia',
 
     // Transfer
@@ -1104,6 +1164,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'statements.download': 'Descargar PDF',
     'statements.view': 'Ver extracto',
     'statements.year': 'Año',
+    'statements.generate': 'Generar extracto',
+    'statements.generated': 'Extracto generado exitosamente.',
+    'statements.pending': 'Pendiente',
 
     // Profile
     'profile.title': 'Tu perfil',
@@ -1217,7 +1280,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Contactar ventas',
     'cta.disclaimer': 'Sin verificación de crédito • Gratis para uso personal • Cancelar en cualquier momento',
 
-    // Common Extended
+    // Common
+    'common.amount': 'Cantidad',
+    'common.error': 'Error',
+    'common.processing': 'Procesando...',
+    'common.confirm': 'Confirmar',
+    'common.cancel': 'Cancelar',
+    'common.success': 'Éxito',
     'common.learnMore': 'Saber más',
 
     // Security Page
@@ -1429,7 +1498,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.login': 'Connexion',
     'nav.register': 'Ouvrir un compte',
     'nav.dashboard': 'Tableau de bord',
-    'nav.deposit': 'Dépôt',
+    'nav.deposit': 'Ajouter de l\'argent',
     'nav.transfer': 'Virement',
     'nav.withdraw': 'Retrait',
     'nav.statements': 'Relevés',
@@ -1509,12 +1578,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.virtualCardFrozen': 'Gelée',
     'dashboard.virtualCardReveal': 'Afficher',
     'dashboard.virtualCardHide': 'Masquer',
+    'dashboard.virtualCardCopy': 'Copier les détails',
     'dashboard.virtualCardCopyNumber': 'Copier le numéro',
     'dashboard.virtualCardCopyCvv': 'Copier le CVV',
     'dashboard.virtualCardEmpty': 'Aucune carte virtuelle disponible.',
 
     // Transactions
-    'transaction.deposit': 'Dépôt',
+    'transaction.deposit': 'Ajouter de l\'argent',
     'transaction.transfer': 'Virement',
     'transaction.withdraw': 'Retrait',
     'transaction.payment': 'Paiement',
@@ -1528,7 +1598,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'transaction.failed': 'Échoué',
 
     // Actions
-    'action.deposit': 'Déposer des fonds',
+    'action.deposit': 'Ajouter de l\'argent',
     'action.transfer': 'Envoyer de l\'argent',
     'action.withdraw': 'Retirer',
     'action.continue': 'Continuer',
@@ -1541,13 +1611,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'action.edit': 'Modifier',
 
     // Deposit
-    'deposit.title': 'Déposer des fonds',
+    'deposit.title': 'Ajouter de l\'argent',
     'deposit.method': 'Choisir une méthode',
     'deposit.bankTransfer': 'Virement bancaire',
     'deposit.card': 'Carte de débit/crédit',
     'deposit.mobile': 'Mobile Money',
     'deposit.amount': 'Saisir le montant',
-    'deposit.success': 'Dépôt réussi!',
+    'deposit.success': 'Argent ajouté avec succès!',
     'deposit.reference': 'Numéro de référence',
 
     // Transfer
@@ -1575,6 +1645,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'statements.download': 'Télécharger PDF',
     'statements.view': 'Voir le relevé',
     'statements.year': 'Année',
+    'statements.generate': 'Générer le relevé',
+    'statements.generated': 'Relevé généré avec succès.',
+    'statements.pending': 'En attente',
 
     // Profile
     'profile.title': 'Votre profil',
@@ -1688,7 +1761,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'cta.secondary': 'Contacter les ventes',
     'cta.disclaimer': 'Pas de vérification de crédit • Gratuit pour usage personnel • Annuler à tout moment',
 
-    // Common Extended
+    // Common
+    'common.amount': 'Montant',
+    'common.error': 'Erreur',
+    'common.processing': 'Traitement...',
+    'common.confirm': 'Confirmer',
+    'common.cancel': 'Annuler',
+    'common.success': 'Succès',
     'common.learnMore': 'En savoir plus',
 
     // Security Page

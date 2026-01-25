@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 
 interface ReceiptProps {
-  type: 'deposit' | 'transfer' | 'withdraw';
+  type: 'deposit' | 'transfer' | 'withdraw' | 'external-transfer';
   reference: string;
   amount: string;
   date: string;
@@ -29,6 +29,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
     deposit: t('deposit.success'),
     transfer: t('transfer.success'),
     withdraw: t('withdraw.success'),
+    'external-transfer': t('externalTransfer.success'),
   };
 
   const copyReference = () => {
@@ -52,7 +53,7 @@ export const Receipt: React.FC<ReceiptProps> = ({
       <div className="bg-card rounded-2xl p-6 shadow-card mt-6 space-y-4">
         <div className="flex justify-between items-center py-3 border-b border-border">
           <span className="text-muted-foreground">{t('common.amount')}</span>
-          <span className="font-semibold text-lg">₵{amount}</span>
+          <span className="font-semibold text-lg">${amount}</span>
         </div>
 
         {recipient && (

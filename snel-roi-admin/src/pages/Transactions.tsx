@@ -10,12 +10,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { transactionService, Transaction } from "@/services/transactionService";
-import { Loader2, Check, X } from "lucide-react";
+import { Loader2, Check, X, Trash2 } from "lucide-react";
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   const fetchTransactions = async () => {
     try {
@@ -31,6 +32,25 @@ export default function Transactions() {
   useEffect(() => {
     fetchTransactions();
   }, []);
+
+  const handleClearAll = async () => {
+    const confirmed = window.confirm(
+      "☢️ SYSTEM RESET: Are you absolutely sure you want to CLEAR ALL TRANSACTION HISTORY?\n\nThis will permanently delete all records, crypto deposits, and reset all user balances to $0.00.\n\nTHIS ACTION CANNOT BE UNDONE."
+    );
+    
+    if (!confirmed) return;
+
+    setIsClearing(true);
+    try {
+      await transactionService.clearAll();
+      alert("System purged successfully. Current balances are now $0.00.");
+      await fetchTransactions();
+    } catch (error: any) {
+      alert(error.message || "Failed to purge history");
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const handleApprove = async (id: number) => {
     setActionLoading(id);
@@ -67,6 +87,15 @@ export default function Transactions() {
           <h2 className="text-3xl font-bold tracking-tight font-display bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">Transactions</h2>
           <p className="text-muted-foreground">Review and manage user transactions.</p>
         </div>
+        <Button 
+          variant="destructive" 
+          className="gap-2 shadow-lg shadow-destructive/20" 
+          onClick={handleClearAll}
+          disabled={isClearing}
+        >
+          {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          Clear Transaction History
+        </Button>
       </div>
 
       <Card className="border-border/50 bg-card/50 backdrop-blur shadow-sm">
@@ -93,7 +122,7 @@ export default function Transactions() {
                   <TableCell className="font-medium">{tx.reference}</TableCell>
                   <TableCell>{tx.created_by_email || <span className="text-muted-foreground italic">System</span>}</TableCell>
                   <TableCell className="capitalize">{tx.entry_type}</TableCell>
-                  <TableCell className="font-mono">₵{Number(tx.amount).toLocaleString('en-US')}</TableCell>
+                    <TableCell className="font-mono">${Number(tx.amount).toLocaleString('en-US')}</TableCell>
                   <TableCell>
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
                       tx.status === 'POSTED' ? 'bg-green-500/10 text-green-500 ring-green-500/20' :

@@ -37,12 +37,29 @@ interface Transaction {
   memo: string;
 }
 
+interface PendingCryptoDeposit {
+  id: number;
+  amount_usd: string;
+  crypto_wallet_details: {
+    crypto_type_display: string;
+    network_display: string;
+  };
+  verification_status_display: string;
+  created_at: string;
+}
+
 interface DashboardData {
   accounts: Account[];
   recent_transactions: Transaction[];
+  unsettled_crypto_deposits?: PendingCryptoDeposit[];
   total_balance: number;
   insights: { debits_last_30_days: number; credits_last_30_days: number };
   virtual_card: { status: string; last_four: string };
+  account_status?: {
+    has_frozen_account: boolean;
+    frozen_account_numbers: string[];
+    message: string | null;
+  };
 }
 
 const Dashboard = () => {
@@ -96,6 +113,28 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 lg:space-y-8 pb-20 lg:pb-0">
+      {/* Frozen Account Alert */}
+      {dashboard?.account_status?.has_frozen_account && (
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-white text-xs font-bold">!</span>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-red-900 dark:text-red-100 font-semibold mb-1">
+                {t('dashboard.accountFrozen')}
+              </h3>
+              <p className="text-red-700 dark:text-red-300 text-sm">
+                Your account {dashboard.account_status.frozen_account_numbers[0]} has been frozen. Please contact <strong>customer care at banking@snelroi.com</strong> to resolve this issue.
+              </p>
+              <p className="text-red-600 dark:text-red-400 text-xs mt-1">
+                {t('dashboard.frozenAccount')}: {dashboard.account_status.frozen_account_numbers[0]}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">
           {t('dashboard.welcome')}, {user?.username.split('@')[0]}! 👋
@@ -104,20 +143,20 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="md:col-span-2 banking-card text-primary-foreground">
+        <div className="md:col-span-2 banking-card text-primary-foreground relative">
           <div className="relative z-10">
             <p className="text-sm opacity-70 mb-1">{t('dashboard.totalBalance')}</p>
             <p className="text-4xl lg:text-5xl font-bold mb-6">
-              ₵{Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${Number(totalBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </p>
-            <div className="flex gap-8">
+            <div className="flex flex-col sm:flex-row sm:gap-8 gap-4">
               <div>
                 <div className="flex items-center gap-2 text-sm opacity-70 mb-1">
                   <TrendingUp className="h-4 w-4" />
                   {t('dashboard.available')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ₵{Number(totalAvailable).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(totalAvailable).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div>
@@ -126,9 +165,25 @@ const Dashboard = () => {
                   {t('dashboard.pending')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ₵{Number(pendingAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(pendingAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
+            </div>
+            
+            {/* Add Money and Send Money Buttons */}
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <Link to="/app/deposit" className="flex-1 sm:flex-none">
+                <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
+                  <ArrowDownToLine className="h-4 w-4 mr-2" />
+                  {t('nav.deposit')}
+                </Button>
+              </Link>
+              <Link to="/app/transfer" className="flex-1 sm:flex-none">
+                <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
+                  <Send className="h-4 w-4 mr-2" />
+                  {t('nav.transfer')}
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -174,7 +229,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <p className="font-semibold text-foreground">
-                  ₵{Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(account.balance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             ))}
@@ -211,7 +266,7 @@ const Dashboard = () => {
                   <div className="text-right">
                     <p className="text-xs opacity-70">{user?.username}</p>
                     <p className="text-sm font-medium mt-1">
-                      GHS {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
+                      USD {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
                     </p>
                   </div>
                 </div>
@@ -245,6 +300,29 @@ const Dashboard = () => {
             </Link>
           </div>
           <div className="space-y-2">
+            {/* Render Unsettled Crypto Deposits First */}
+            {dashboard?.unsettled_crypto_deposits?.map((pending) => (
+              <div key={`pending-${pending.id}`} className={`flex items-center justify-between p-3 rounded-xl border ${pending.verification_status_display.toLowerCase().includes('reject') ? 'bg-red-500/10 border-red-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${pending.verification_status_display.toLowerCase().includes('reject') ? 'bg-red-500/20' : 'bg-amber-500/20'}`}>
+                    <ArrowDownToLine className={`h-5 w-5 ${pending.verification_status_display.toLowerCase().includes('reject') ? 'text-red-600' : 'text-amber-600'}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {pending.crypto_wallet_details.crypto_type_display} Deposit
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {pending.crypto_wallet_details.network_display} • {new Date(pending.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-bold ${pending.verification_status_display.toLowerCase().includes('reject') ? 'text-red-600' : 'text-amber-600'}`}>+${pending.amount_usd}</p>
+                  <StatusBadge status={pending.verification_status_display.toUpperCase()} />
+                </div>
+              </div>
+            ))}
+
             {recentTransactions.map((transaction) => (
               <div key={transaction.id} className="flex items-center justify-between p-3 rounded-xl bg-secondary/40">
                 <div className="flex items-center gap-3">
@@ -268,11 +346,11 @@ const Dashboard = () => {
           <div className="grid gap-3">
             <div className="rounded-xl bg-secondary/40 p-4">
               <p className="text-xs text-muted-foreground">Credits last 30 days</p>
-              <p className="text-lg font-semibold">₵{Number(dashboard?.insights.credits_last_30_days ?? 0).toFixed(2)}</p>
+              <p className="text-lg font-semibold">${Number(dashboard?.insights.credits_last_30_days ?? 0).toFixed(2)}</p>
             </div>
             <div className="rounded-xl bg-secondary/40 p-4">
               <p className="text-xs text-muted-foreground">Debits last 30 days</p>
-              <p className="text-lg font-semibold">₵{Number(dashboard?.insights.debits_last_30_days ?? 0).toFixed(2)}</p>
+              <p className="text-lg font-semibold">${Number(dashboard?.insights.debits_last_30_days ?? 0).toFixed(2)}</p>
             </div>
           </div>
         </div>

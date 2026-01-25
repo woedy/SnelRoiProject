@@ -22,15 +22,35 @@ interface Transaction {
   memo: string;
 }
 
+interface PendingCryptoDeposit {
+  id: number;
+  amount_usd: string;
+  crypto_wallet_details: {
+    crypto_type_display: string;
+    network_display: string;
+  };
+  verification_status_display: string;
+  created_at: string;
+}
+
+interface TransactionsResponse {
+  transactions: Transaction[];
+  unsettled_crypto_deposits: PendingCryptoDeposit[];
+}
+
 const Transactions = () => {
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [unsettledCrypto, setUnsettledCrypto] = useState<PendingCryptoDeposit[]>([]);
 
   useEffect(() => {
-    apiRequest<Transaction[]>('/transactions').then(setTransactions);
+    apiRequest<TransactionsResponse>('/transactions').then((data) => {
+      setTransactions(data.transactions);
+      setUnsettledCrypto(data.unsettled_crypto_deposits);
+    });
   }, []);
 
   const filteredTransactions = transactions.filter((transaction) => {
@@ -75,12 +95,52 @@ const Transactions = () => {
       </div>
 
       <div className="bg-card rounded-2xl shadow-card overflow-hidden">
-        {filteredTransactions.length === 0 ? (
+        {(filteredTransactions.length === 0 && unsettledCrypto.length === 0) ? (
           <div className="p-12 text-center">
             <p className="text-muted-foreground">No transactions found</p>
           </div>
         ) : (
           <div className="divide-y divide-border">
+            {/* Render Unsettled Crypto (Pending & Rejected) First */}
+            {unsettledCrypto
+              .filter(p => {
+                const status = p.verification_status_display.toLowerCase();
+                if (statusFilter === 'all') return true;
+                if (statusFilter === 'pending' && status.includes('pending')) return true;
+                if (statusFilter === 'declined' && status.includes('reject')) return true;
+                return false;
+              })
+              .map((pending) => {
+                const isRejected = pending.verification_status_display.toLowerCase().includes('reject');
+                return (
+                  <div
+                    key={`pending-${pending.id}`}
+                    className={`w-full flex items-center justify-between p-4 transition-colors text-left border-l-4 ${isRejected ? 'bg-red-500/5 hover:bg-red-500/10 border-red-500' : 'bg-amber-500/5 hover:bg-amber-500/10 border-amber-500'}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <TransactionIcon type="DEPOSIT" />
+                      <div>
+                        <p className="font-medium text-foreground">{pending.crypto_wallet_details.crypto_type_display} Deposit</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(pending.created_at).toLocaleDateString('de-DE')}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full border ${isRejected ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 border-red-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 border-amber-200'}`}>
+                            {pending.crypto_wallet_details.network_display}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-semibold ${isRejected ? 'text-red-600' : 'text-amber-600'}`}>+${pending.amount_usd}</p>
+                      <div className="mt-1">
+                        <StatusBadge status={isRejected ? 'REJECTED' : 'PENDING'} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
             {filteredTransactions.map((transaction) => (
               <button
                 key={transaction.id}

@@ -1,0 +1,31 @@
+{% extends 'emails/base.html' %}
+
+{% block content %}
+<p>Hello {{ user.first_name|default:user.username }},</p>
+
+<p>Your crypto deposit request could not be verified.</p>
+
+<div class="alert alert-danger">
+    <strong>Status: REJECTED</strong>
+</div>
+
+<table class="info-table">
+    <tr>
+        <td>Wallet Type</td>
+        <td>{{ wallet_type }}</td>
+    </tr>
+    <tr>
+        <td>Requested Amount</td>
+        <td>${{ amount_usd }}</td>
+    </tr>
+</table>
+
+{% if notes %}
+<div class="alert" style="background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;">
+    <strong>Reason:</strong><br>
+    {{ notes }}
+</div>
+{% endif %}
+
+<p>Please contact support if you believe this is an error.</p>
+{% endblock %}

@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from .models import LedgerEntry, Statement
 from .services import approve_entry
+from . import emails # Ensure email tasks are registered
 
 
 @shared_task

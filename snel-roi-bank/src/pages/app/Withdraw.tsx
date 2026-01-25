@@ -15,9 +15,15 @@ const Withdraw = () => {
   const [step, setStep] = useState<'amount' | 'success'>('amount');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleConfirm = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
     try {
+      // Add artificial delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       const response = await apiRequest<{ reference: string }>(`/withdrawals`, {
         method: 'POST',
         body: JSON.stringify({ amount }),
@@ -30,6 +36,8 @@ const Withdraw = () => {
         description: (error as Error).message,
         variant: 'destructive',
       });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -83,7 +91,7 @@ const Withdraw = () => {
             <Label htmlFor="amount">{t('common.amount')}</Label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-semibold text-muted-foreground">
-                ₵
+                $
               </span>
               <Input
                 id="amount"
@@ -103,16 +111,25 @@ const Withdraw = () => {
                   size="sm"
                   onClick={() => setAmount(preset.toString())}
                 >
-                  ₵{preset}
+                  ${preset}
                 </Button>
               ))}
             </div>
           </div>
         </div>
 
-        <Button size="lg" className="w-full" onClick={handleConfirm}>
-          {t('action.confirm')}
-          <ChevronRight className="ml-2 h-4 w-4" />
+        <Button size="lg" className="w-full" onClick={handleConfirm} disabled={isProcessing}>
+          {isProcessing ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent mr-2" />
+              {t('common.processing')}
+            </>
+          ) : (
+            <>
+              {t('action.confirm')}
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </>
+          )}
         </Button>
       </div>
     </div>

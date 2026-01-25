@@ -1,0 +1,21 @@
+{% extends 'emails/base.html' %}
+
+{% block content %}
+<p>Hello {{ user.first_name|default:user.username }},</p>
+
+<p>Your account <strong>{{ account_number }}</strong> has been frozen due to security concerns or administrative action.
+</p>
+
+<div class="alert alert-danger">
+    <strong>Status: FROZEN</strong><br>
+    You will be unable to make transfers or use your debit card until this matter is resolved.
+</div>
+
+<p>We require additional information before you can proceed with sending money. In the meantime, your account has been
+    placed on temporary hold due to suspected suspicious activity.</p>
+
+<p>To assist us in resolving this issue promptly, please contact our Support Team at
+    <strong>banking@snelroi.com</strong> at your earliest convenience. Thank you for your cooperation.</p>
+
+<a href="mailto:banking@snelroi.com" class="button">Contact Support</a>
+{% endblock %}
