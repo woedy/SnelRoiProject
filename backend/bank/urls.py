@@ -51,4 +51,10 @@ urlpatterns = [
     path('admin/accounts', views.AdminAccountsView.as_view()),
     path('admin/accounts/<int:pk>', views.AdminAccountDetailView.as_view()),
     path('admin/audit', views.AdminAuditView.as_view()),
+    
+    # Customer Support Chat Endpoints
+    path('support/conversations', views.SupportConversationsView.as_view()),
+    path('support/conversations/<int:pk>', views.SupportConversationDetailView.as_view()),
+    path('support/conversations/<int:conversation_id>/messages', views.SendSupportMessageView.as_view()),
+    path('support/unread-count', views.SupportUnreadCountView.as_view()),
 ]

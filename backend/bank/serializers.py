@@ -3,7 +3,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage
 from .services import create_customer_account
 
 User = get_user_model()
@@ -363,5 +363,82 @@ class AdminManualTransferSerializer(serializers.Serializer):
     def validate_from_account_number(self, value):
         if not value:
             return value
+        return value.strip()
+
+
+class SupportMessageSerializer(serializers.ModelSerializer):
+    """Serializer for support messages"""
+    sender_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportMessage
+        fields = ['id', 'sender_type', 'sender_name', 'message', 'is_read', 'created_at']
+        read_only_fields = ['id', 'sender_type', 'sender_name', 'created_at']
+    
+    def get_sender_name(self, obj):
+        if obj.sender_type == 'CUSTOMER':
+            return obj.sender_user.profile.full_name
+        return 'Support Team'
+
+
+class SupportConversationSerializer(serializers.ModelSerializer):
+    """Serializer for support conversations"""
+    messages = SupportMessageSerializer(many=True, read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    unread_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportConversation
+        fields = ['id', 'customer_name', 'customer_email', 'status', 'subject', 'created_at', 
+                  'updated_at', 'last_message_at', 'messages', 'unread_count']
+        read_only_fields = ['id', 'customer_name', 'customer_email', 'created_at', 'updated_at', 'last_message_at']
+    
+    def get_unread_count(self, obj):
+        user = self.context.get('request').user
+        if user.is_staff:
+            # Admin sees unread messages from customers
+            return obj.messages.filter(sender_type='CUSTOMER', is_read=False).count()
+        # Customer sees unread messages from admin
+        return obj.messages.filter(sender_type='ADMIN', is_read=False).count()
+
+
+class SupportConversationListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for conversation lists"""
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    unread_count = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportConversation
+        fields = ['id', 'customer_name', 'customer_email', 'status', 'subject', 
+                  'created_at', 'updated_at', 'last_message_at', 'unread_count', 'last_message']
+        read_only_fields = ['id', 'customer_name', 'customer_email', 'created_at', 'updated_at', 'last_message_at']
+    
+    def get_unread_count(self, obj):
+        user = self.context.get('request').user
+        if user.is_staff:
+            return obj.messages.filter(sender_type='CUSTOMER', is_read=False).count()
+        return obj.messages.filter(sender_type='ADMIN', is_read=False).count()
+    
+    def get_last_message(self, obj):
+        last_msg = obj.messages.last()
+        if last_msg:
+            return {
+                'message': last_msg.message[:100],  # Truncate for preview
+                'sender_type': last_msg.sender_type,
+                'created_at': last_msg.created_at
+            }
+        return None
+
+
+class SendMessageSerializer(serializers.Serializer):
+    """Serializer for sending a new message"""
+    message = serializers.CharField(max_length=5000)
+    
+    def validate_message(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Message cannot be empty")
         return value.strip()
 

@@ -238,3 +238,48 @@ class CryptoDeposit(models.Model):
     def __str__(self):
         return f"{self.customer.full_name} - {self.crypto_wallet.crypto_type} ${self.amount_usd}"
 
+
+class SupportConversation(models.Model):
+    """Represents a support conversation between a customer and admin"""
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('RESOLVED', 'Resolved'),
+        ('CLOSED', 'Closed'),
+    ]
+    
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='support_conversations')
+    assigned_admin = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_conversations')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+    subject = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-last_message_at', '-created_at']
+    
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.get_status_display()}"
+
+
+class SupportMessage(models.Model):
+    """Individual messages within a support conversation"""
+    SENDER_TYPE_CHOICES = [
+        ('CUSTOMER', 'Customer'),
+        ('ADMIN', 'Admin'),
+    ]
+    
+    conversation = models.ForeignKey(SupportConversation, on_delete=models.CASCADE, related_name='messages')
+    sender_type = models.CharField(max_length=10, choices=SENDER_TYPE_CHOICES)
+    sender_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='support_messages')
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.conversation.id} - {self.sender_type} - {self.created_at}"
+

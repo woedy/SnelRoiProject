@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -34,6 +34,10 @@ from .serializers import (
     CryptoDepositCreateSerializer,
     CryptoDepositProofUploadSerializer,
     CryptoDepositVerificationSerializer,
+    SupportConversationSerializer,
+    SupportConversationListSerializer,
+    SupportMessageSerializer,
+    SendMessageSerializer,
 )
 from .services import (
     add_posting,
@@ -939,4 +943,174 @@ class AdminManualTransferView(APIView):
             'detail': f'Successfully transferred ${amount} to {to_account.account_number}',
             'reference': entry.reference
         })
+
+
+# ============ Customer Support Chat Views ============
+
+class SupportConversationsView(APIView):
+    """List conversations (filtered by user type)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        if user.is_staff:
+            # Admin sees all conversations
+            conversations = SupportConversation.objects.all()
+            status_filter = request.query_params.get('status')
+            if status_filter:
+                conversations = conversations.filter(status=status_filter)
+        else:
+            # Customer sees only their conversations
+            conversations = SupportConversation.objects.filter(customer=user.profile)
+        
+        serializer = SupportConversationListSerializer(
+            conversations, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    def post(self, request):
+        """Create a new conversation (customers only)"""
+        if request.user.is_staff:
+            return Response(
+                {'detail': 'Admins cannot create conversations'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get or create active conversation for this customer
+        conversation, created = SupportConversation.objects.get_or_create(
+            customer=request.user.profile,
+            status__in=['OPEN', 'IN_PROGRESS'],
+            defaults={'subject': 'Support Request'}
+        )
+        
+        serializer = SupportConversationSerializer(conversation, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class SupportConversationDetailView(APIView):
+    """Get conversation details with messages"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self, pk, user):
+        try:
+            conversation = SupportConversation.objects.get(pk=pk)
+            # Check permissions
+            if not user.is_staff and conversation.customer.user != user:
+                return None
+            return conversation
+        except SupportConversation.DoesNotExist:
+            return None
+    
+    def get(self, request, pk):
+        conversation = self.get_object(pk, request.user)
+        if not conversation:
+            return Response(
+                {'detail': 'Conversation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Mark messages as read
+        if request.user.is_staff:
+            # Admin marks customer messages as read
+            conversation.messages.filter(sender_type='CUSTOMER', is_read=False).update(is_read=True)
+        else:
+            # Customer marks admin messages as read
+            conversation.messages.filter(sender_type='ADMIN', is_read=False).update(is_read=True)
+        
+        serializer = SupportConversationSerializer(conversation, context={'request': request})
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Update conversation status (admin only)"""
+        if not request.user.is_staff:
+            return Response(
+                {'detail': 'Only admins can update conversation status'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        conversation = self.get_object(pk, request.user)
+        if not conversation:
+            return Response(
+                {'detail': 'Conversation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        new_status = request.data.get('status')
+        if new_status and new_status in dict(SupportConversation.STATUS_CHOICES):
+            conversation.status = new_status
+            conversation.save(update_fields=['status'])
+        
+        serializer = SupportConversationSerializer(conversation, context={'request': request})
+        return Response(serializer.data)
+
+
+class SendSupportMessageView(APIView):
+    """Send a message in a conversation"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, conversation_id):
+        try:
+            conversation = SupportConversation.objects.get(pk=conversation_id)
+        except SupportConversation.DoesNotExist:
+            return Response(
+                {'detail': 'Conversation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check permissions
+        if not request.user.is_staff and conversation.customer.user != request.user:
+            return Response(
+                {'detail': 'You do not have permission to send messages in this conversation'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = SendMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Determine sender type
+        sender_type = 'ADMIN' if request.user.is_staff else 'CUSTOMER'
+        
+        # Create message
+        message = SupportMessage.objects.create(
+            conversation=conversation,
+            sender_type=sender_type,
+            sender_user=request.user,
+            message=serializer.validated_data['message']
+        )
+        
+        # Update conversation
+        conversation.last_message_at = timezone.now()
+        if conversation.status == 'OPEN' and sender_type == 'ADMIN':
+            conversation.status = 'IN_PROGRESS'
+        conversation.save(update_fields=['last_message_at', 'status'])
+        
+        response_serializer = SupportMessageSerializer(message)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class SupportUnreadCountView(APIView):
+    """Get unread message count"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        if user.is_staff:
+            # Count unread customer messages across all conversations
+            unread_count = SupportMessage.objects.filter(
+                sender_type='CUSTOMER',
+                is_read=False
+            ).count()
+        else:
+            # Count unread admin messages in user's conversations
+            unread_count = SupportMessage.objects.filter(
+                conversation__customer=user.profile,
+                sender_type='ADMIN',
+                is_read=False
+            ).count()
+        
+        return Response({'unread_count': unread_count})
 

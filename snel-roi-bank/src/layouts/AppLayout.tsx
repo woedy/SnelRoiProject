@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
+import { ChatWidget } from '@/components/chat/ChatWidget';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -205,6 +206,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             })}
           </div>
         </nav>
+
+        {/* Chat Widget */}
+        <ChatWidget />
       </div>
     </div>
   );
