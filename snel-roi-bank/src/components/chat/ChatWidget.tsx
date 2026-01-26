@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageCircle, Loader2 } from 'lucide-react';
+import { X, Send, MessageCircle, Loader2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { chatService, type SupportConversation, type SupportMessage } from '@/services/chatService';
+import { chatService, type SupportConversation, type SupportMessage, type ConnectionStatus } from '@/services/chatService';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -16,15 +16,26 @@ export function ChatWidget() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [isTyping, setIsTyping] = useState(false);
+  const [adminOnline, setAdminOnline] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // For ScrollArea component, we need to find the viewport element
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
-  }, [conversation?.messages]);
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [conversation?.messages, isTyping]);
 
   // Load conversation when widget opens
   useEffect(() => {
@@ -33,21 +44,52 @@ export function ChatWidget() {
     }
   }, [isOpen]);
 
-  // Poll for new messages when chat is open
+  // Join WebSocket when chat is open and conversation exists
   useEffect(() => {
     if (isOpen && conversation) {
-      startPolling();
-    } else {
-      stopPolling();
+      chatService.connectToChat(
+        conversation.id,
+        (newMessage) => {
+          setConversation(prev => {
+            if (!prev || prev.id !== conversation.id) return prev;
+            
+            // Avoid duplicate messages
+            const exists = prev.messages.some(m => m.id === newMessage.id);
+            if (exists) return prev;
+            
+            return {
+              ...prev,
+              messages: [...prev.messages, newMessage]
+            };
+          });
+        },
+        (isTyping, senderType) => {
+          // Only show typing indicator for admin messages
+          if (senderType === 'ADMIN') {
+            setIsTyping(isTyping);
+          }
+        },
+        (status) => {
+          setConnectionStatus(status);
+        },
+        (status) => {
+          setAdminOnline(status === 'online');
+        }
+      );
     }
-    return () => stopPolling();
-  }, [isOpen, conversation]);
+    
+    return () => {
+      if (isOpen && conversation) {
+        chatService.disconnect();
+      }
+    };
+  }, [isOpen, conversation?.id]);
 
-  // Poll for unread count when chat is closed
+  // Poll for unread count ONLY when chat is closed
   useEffect(() => {
     if (!isOpen) {
       loadUnreadCount();
-      const interval = setInterval(loadUnreadCount, 5000);
+      const interval = setInterval(loadUnreadCount, 30000);
       return () => clearInterval(interval);
     }
   }, [isOpen]);
@@ -57,7 +99,7 @@ export function ChatWidget() {
       setLoading(true);
       const conv = await chatService.getOrCreateConversation();
       setConversation(conv);
-      setUnreadCount(0); // Reset unread when opening
+      setUnreadCount(0);
     } catch (error) {
       toast.error('Failed to load conversation');
       console.error(error);
@@ -75,28 +117,6 @@ export function ChatWidget() {
     }
   };
 
-  const startPolling = () => {
-    if (pollingIntervalRef.current) return;
-    
-    pollingIntervalRef.current = setInterval(async () => {
-      if (conversation) {
-        try {
-          const updated = await chatService.getConversation(conversation.id);
-          setConversation(updated);
-        } catch (error) {
-          console.error('Polling error:', error);
-        }
-      }
-    }, 3000); // Poll every 3 seconds
-  };
-
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-  };
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !conversation || sending) return;
@@ -107,20 +127,52 @@ export function ChatWidget() {
 
     try {
       await chatService.sendMessage(conversation.id, messageText);
-      // Immediately reload conversation to show new message
-      const updated = await chatService.getConversation(conversation.id);
-      setConversation(updated);
+      // WebSocket handles adding the message to the UI
     } catch (error) {
       toast.error('Failed to send message');
       console.error(error);
-      setMessage(messageText); // Restore message on error
+      setMessage(messageText);
     } finally {
       setSending(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(e.target.value);
+    // Send typing indicator
+    if (e.target.value.trim()) {
+      chatService.handleTyping();
     }
   };
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
+  };
+
+  const getConnectionIcon = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return <Wifi className="h-3 w-3 text-green-500" />;
+      case 'connecting':
+      case 'reconnecting':
+        return <RefreshCw className="h-3 w-3 text-yellow-500 animate-spin" />;
+      case 'disconnected':
+        return <WifiOff className="h-3 w-3 text-red-500" />;
+    }
+  };
+
+  const getConnectionText = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return 'Connected';
+      case 'connecting':
+        return 'Connecting...';
+      case 'reconnecting':
+        return 'Reconnecting...';
+      case 'disconnected':
+        return 'Disconnected';
+    }
   };
 
   if (!isOpen) {
@@ -134,7 +186,7 @@ export function ChatWidget() {
         {unreadCount > 0 && (
           <Badge 
             variant="destructive" 
-            className="absolute -top-1 -right-1 h-6 w-6 rounded-full p-0 flex items-center justify-center text-xs font-bold"
+            className="absolute -top-1 -right-1 h-6 w-6 rounded-full p-0 flex items-center justify-center text-xs font-bold animate-pulse"
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </Badge>
@@ -157,7 +209,13 @@ export function ChatWidget() {
             </Avatar>
             <div>
               <h3 className="font-semibold">Customer Support</h3>
-              <p className="text-xs opacity-90">We're here to help</p>
+              <div className="flex items-center gap-1.5 text-xs opacity-90">
+                {getConnectionIcon()}
+                <span>{getConnectionText()}</span>
+                {adminOnline && connectionStatus === 'connected' && (
+                  <span className="ml-1">• Online</span>
+                )}
+              </div>
             </div>
           </div>
           <Button
@@ -185,6 +243,23 @@ export function ChatWidget() {
                 <div className="text-center text-muted-foreground py-8">
                   <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>Start a conversation with our support team</p>
+                  <p className="text-sm mt-2">We typically respond within minutes</p>
+                </div>
+              )}
+              {isTyping && (
+                <div className="flex gap-2 items-start">
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      CS
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-2">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -193,19 +268,26 @@ export function ChatWidget() {
 
         {/* Input */}
         <form onSubmit={handleSendMessage} className="p-4 border-t bg-muted/30">
+          {connectionStatus === 'disconnected' && (
+            <div className="mb-2 text-sm text-destructive flex items-center gap-2">
+              <WifiOff className="h-4 w-4" />
+              <span>Connection lost. Trying to reconnect...</span>
+            </div>
+          )}
           <div className="flex gap-2">
             <Input
+              ref={inputRef}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={handleInputChange}
               placeholder="Type your message..."
-              disabled={sending || loading}
+              disabled={sending || loading || connectionStatus !== 'connected'}
               className="flex-1 min-h-[44px]"
               autoFocus
             />
             <Button
               type="submit"
               size="icon"
-              disabled={!message.trim() || sending || loading}
+              disabled={!message.trim() || sending || loading || connectionStatus !== 'connected'}
               className="min-h-[44px] min-w-[44px]"
             >
               {sending ? (
@@ -219,7 +301,7 @@ export function ChatWidget() {
       </div>
 
       {/* Desktop: Floating window */}
-      <div className="hidden md:block fixed bottom-20 right-4 z-50 w-96 h-[600px] bg-background border rounded-lg shadow-2xl flex flex-col overflow-hidden">
+      <div className="hidden md:flex fixed bottom-20 right-4 z-50 w-96 h-[600px] bg-background border rounded-lg shadow-2xl flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-primary text-primary-foreground">
           <div className="flex items-center gap-3">
@@ -230,7 +312,13 @@ export function ChatWidget() {
             </Avatar>
             <div>
               <h3 className="font-semibold text-sm">Customer Support</h3>
-              <p className="text-xs opacity-90">We're here to help</p>
+              <div className="flex items-center gap-1.5 text-xs opacity-90">
+                {getConnectionIcon()}
+                <span>{getConnectionText()}</span>
+                {adminOnline && connectionStatus === 'connected' && (
+                  <span className="ml-1">• Online</span>
+                )}
+              </div>
             </div>
           </div>
           <Button
@@ -258,6 +346,23 @@ export function ChatWidget() {
                 <div className="text-center text-muted-foreground py-8">
                   <MessageCircle className="h-10 w-10 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">Start a conversation</p>
+                  <p className="text-xs mt-1">We typically respond within minutes</p>
+                </div>
+              )}
+              {isTyping && (
+                <div className="flex gap-2 items-start">
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      CS
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-2">
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -266,18 +371,25 @@ export function ChatWidget() {
 
         {/* Input */}
         <form onSubmit={handleSendMessage} className="p-3 border-t bg-muted/30">
+          {connectionStatus === 'disconnected' && (
+            <div className="mb-2 text-xs text-destructive flex items-center gap-1.5">
+              <WifiOff className="h-3 w-3" />
+              <span>Connection lost. Reconnecting...</span>
+            </div>
+          )}
           <div className="flex gap-2">
             <Input
+              ref={inputRef}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={handleInputChange}
               placeholder="Type your message..."
-              disabled={sending || loading}
+              disabled={sending || loading || connectionStatus !== 'connected'}
               className="flex-1"
             />
             <Button
               type="submit"
               size="icon"
-              disabled={!message.trim() || sending || loading}
+              disabled={!message.trim() || sending || loading || connectionStatus !== 'connected'}
             >
               {sending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -300,7 +412,7 @@ function ChatMessage({ message }: { message: SupportMessage }) {
   });
 
   return (
-    <div className={cn('flex gap-2', isCustomer ? 'justify-end' : 'justify-start')}>
+    <div className={cn('flex gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300', isCustomer ? 'justify-end' : 'justify-start')}>
       {!isCustomer && (
         <Avatar className="h-8 w-8 flex-shrink-0">
           <AvatarFallback className="bg-primary text-primary-foreground text-xs">

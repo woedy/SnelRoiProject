@@ -23,10 +23,18 @@ export default function CustomerSupport() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      // For ScrollArea component, we need to find the viewport element
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
   }, [selectedConversation?.messages]);
 
   // Load conversations on mount
@@ -34,15 +42,36 @@ export default function CustomerSupport() {
     loadConversations();
   }, [statusFilter]);
 
-  // Poll for updates when a conversation is selected
+  // Join WebSocket when a conversation is selected
   useEffect(() => {
+    let socket: WebSocket | null = null;
+    
     if (selectedConversation) {
-      startPolling();
-    } else {
-      stopPolling();
+      socket = chatService.connectToChat(selectedConversation.id, (newMessage) => {
+        setSelectedConversation(prev => {
+          if (!prev || prev.id !== selectedConversation.id) return prev;
+          
+          // Avoid duplicate messages if they arrive via polling or REST
+          const exists = prev.messages.some(m => m.id === newMessage.id);
+          if (exists) return prev;
+          
+          return {
+            ...prev,
+            messages: [...prev.messages, newMessage]
+          };
+        });
+        
+        // Refresh conversation list to show latest message preview
+        loadConversations();
+      });
     }
-    return () => stopPolling();
-  }, [selectedConversation]);
+    
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+    };
+  }, [selectedConversation?.id]);
 
   const loadConversations = async () => {
     try {
@@ -73,30 +102,6 @@ export default function CustomerSupport() {
     }
   };
 
-  const startPolling = () => {
-    if (pollingIntervalRef.current) return;
-    
-    pollingIntervalRef.current = setInterval(async () => {
-      if (selectedConversation) {
-        try {
-          const updated = await chatService.getConversation(selectedConversation.id);
-          setSelectedConversation(updated);
-        } catch (error) {
-          console.error('Polling error:', error);
-        }
-      }
-      // Also refresh conversation list
-      loadConversations();
-    }, 5000); // Poll every 5 seconds
-  };
-
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-  };
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !selectedConversation || sending) return;
@@ -107,9 +112,8 @@ export default function CustomerSupport() {
 
     try {
       await chatService.sendMessage(selectedConversation.id, messageText);
-      const updated = await chatService.getConversation(selectedConversation.id);
-      setSelectedConversation(updated);
-      loadConversations(); // Refresh list
+      // No need to reloadConversationDetails - WebSocket will push the message to us
+      loadConversations(); // Still refresh list to update the sidebar preview
     } catch (error) {
       toast.error('Failed to send message');
       console.error(error);

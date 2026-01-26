@@ -10,6 +10,8 @@ from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage
@@ -1088,6 +1090,17 @@ class SendSupportMessageView(APIView):
         conversation.save(update_fields=['last_message_at', 'status'])
         
         response_serializer = SupportMessageSerializer(message)
+    
+        # Broadcast to WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{conversation_id}',
+            {
+                'type': 'chat_message',
+                'message': response_serializer.data
+            }
+        )
+    
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 

@@ -13,4 +13,4 @@ COPY backend /app
 # Collect static files during build
 RUN python manage.py collectstatic --noinput
 
-CMD sh -c "python manage.py migrate && python manage.py seed_system && gunicorn banking.wsgi:application --bind 0.0.0.0:8000"
+CMD sh -c "python manage.py migrate && python manage.py seed_system && daphne -b 0.0.0.0 -p 8000 banking.asgi:application"
