@@ -67,7 +67,7 @@ class ChatService {
      * Get or create active conversation for current user
      */
     async getOrCreateConversation(): Promise<SupportConversation> {
-        return await apiRequest<SupportConversation>('/support/conversations', {
+        return await apiRequest<SupportConversation>('/support/conversations/', {
             method: 'POST',
             body: JSON.stringify({}),
         });
@@ -77,21 +77,21 @@ class ChatService {
      * Get all conversations for current user
      */
     async getConversations(): Promise<ConversationListItem[]> {
-        return await apiRequest<ConversationListItem[]>('/support/conversations');
+        return await apiRequest<ConversationListItem[]>('/support/conversations/');
     }
 
     /**
      * Get conversation details with messages
      */
     async getConversation(conversationId: number): Promise<SupportConversation> {
-        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}`);
+        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}/`);
     }
 
     /**
      * Send a message in a conversation
      */
     async sendMessage(conversationId: number, message: string): Promise<SupportMessage> {
-        return await apiRequest<SupportMessage>(`/support/conversations/${conversationId}/messages`, {
+        return await apiRequest<SupportMessage>(`/support/conversations/${conversationId}/messages/`, {
             method: 'POST',
             body: JSON.stringify({ message }),
         });
@@ -101,7 +101,7 @@ class ChatService {
      * Get unread message count
      */
     async getUnreadCount(): Promise<number> {
-        const response = await apiRequest<{ unread_count: number }>('/support/unread-count');
+        const response = await apiRequest<{ unread_count: number }>('/support/unread-count/');
         return response.unread_count;
     }
 
@@ -109,7 +109,7 @@ class ChatService {
      * Update conversation status (admin only)
      */
     async updateConversationStatus(conversationId: number, status: string): Promise<SupportConversation> {
-        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}`, {
+        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}/`, {
             method: 'PATCH',
             body: JSON.stringify({ status }),
         });

@@ -28,7 +28,7 @@ const Profile = () => {
   });
 
   useEffect(() => {
-    apiRequest<ProfileData>('/profile').then((data) => {
+    apiRequest<ProfileData>('/profile/').then((data) => {
       setProfile(data);
       setFormData({
         name: data.full_name,
@@ -40,7 +40,7 @@ const Profile = () => {
 
   const handleSave = async () => {
     try {
-      const data = await apiRequest<ProfileData>('/profile', {
+      const data = await apiRequest<ProfileData>('/profile/', {
         method: 'PATCH',
         body: JSON.stringify({ full_name: formData.name, phone: formData.phone }),
       });

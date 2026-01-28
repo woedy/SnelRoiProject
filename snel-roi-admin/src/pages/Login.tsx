@@ -22,8 +22,7 @@ export default function Login() {
     const formData = new FormData(e.currentTarget);
     
     try {
-      const response = await authService.login(formData);
-      localStorage.setItem("admin_token", response.access);
+      await authService.login(formData);
       navigate(from, { replace: true });
     } catch (err) {
       setError("Invalid credentials or server error");

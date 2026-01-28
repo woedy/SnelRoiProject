@@ -7,12 +7,19 @@ export interface LoginResponse {
 
 export const authService = {
     login: async (credentials: FormData) => {
-        return apiRequest<LoginResponse>("/auth/login", {
+        const response = await apiRequest<LoginResponse>("/auth/login/", {
             method: "POST",
             body: JSON.stringify(Object.fromEntries(credentials)),
         });
+        
+        // Store both tokens
+        localStorage.setItem("admin_token", response.access);
+        localStorage.setItem("admin_refresh_token", response.refresh);
+        
+        return response;
     },
     logout: () => {
         localStorage.removeItem("admin_token");
+        localStorage.removeItem("admin_refresh_token");
     },
 };

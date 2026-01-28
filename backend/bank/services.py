@@ -40,7 +40,7 @@ def get_system_accounts():
     return funding, payout
 
 
-def create_customer_account(user, account_type='CHECKING'):
+def create_customer_account(user, account_type='CHECKING', currency='USD'):
     profile, _ = CustomerProfile.objects.get_or_create(
         user=user,
         defaults={'full_name': user.get_full_name() or user.username, 'phone': ''},
@@ -49,7 +49,7 @@ def create_customer_account(user, account_type='CHECKING'):
     account, _ = Account.objects.get_or_create(
         customer=profile,
         type=account_type,
-        defaults={'account_number': account_number, 'currency': 'USD'},
+        defaults={'account_number': account_number, 'currency': currency},
     )
     return account
 

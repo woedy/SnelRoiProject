@@ -2,11 +2,48 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 type ApiRequestOptions = RequestInit & {
   auth?: boolean;
+  _isRetry?: boolean; // Internal flag to prevent infinite retry loops
 };
 
 const isPublicAuthPath = (path: string) => {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   return normalized.startsWith('/auth/');
+};
+
+// Token refresh function
+const refreshToken = async (): Promise<string | null> => {
+  const refreshToken = localStorage.getItem('snel-roi-refresh-token');
+  if (!refreshToken) return null;
+
+  try {
+    const response = await fetch(`${API_URL}/auth/refresh/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: refreshToken }),
+    });
+
+    if (!response.ok) {
+      // Refresh token is invalid, clear all tokens
+      localStorage.removeItem('snel-roi-token');
+      localStorage.removeItem('snel-roi-refresh-token');
+      return null;
+    }
+
+    const data = await response.json();
+    localStorage.setItem('snel-roi-token', data.access);
+    
+    // If rotation is enabled, update refresh token too
+    if (data.refresh) {
+      localStorage.setItem('snel-roi-refresh-token', data.refresh);
+    }
+    
+    return data.access;
+  } catch (error) {
+    console.error('Token refresh failed:', error);
+    localStorage.removeItem('snel-roi-token');
+    localStorage.removeItem('snel-roi-refresh-token');
+    return null;
+  }
 };
 
 export const getErrorMessage = (errorBody: unknown): string => {
@@ -53,11 +90,23 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const { auth: _auth, ...requestOptions } = options;
+  const { auth: _auth, _isRetry, ...requestOptions } = options;
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
     headers,
   });
+
+  // Handle 401 errors with token refresh
+  if (response.status === 401 && shouldSendAuth && !_isRetry) {
+    const newToken = await refreshToken();
+    if (newToken) {
+      // Retry the request with the new token
+      return apiRequest<T>(path, { ...options, _isRetry: true });
+    } else {
+      // Refresh failed, redirect to login by throwing an auth error
+      throw new Error('Authentication credentials were not provided.');
+    }
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({ detail: 'Request failed' }));
@@ -71,6 +120,7 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
       message.toLowerCase().includes('token')
     ) {
       localStorage.removeItem('snel-roi-token');
+      localStorage.removeItem('snel-roi-refresh-token');
     }
 
     throw new Error(message);

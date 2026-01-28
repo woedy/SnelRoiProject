@@ -33,30 +33,30 @@ export interface CryptoDeposit {
 
 export const cryptoService = {
     // Wallet management
-    getWallets: () => apiRequest<CryptoWallet[]>("/admin/crypto-wallets"),
-    getWallet: (id: number) => apiRequest<CryptoWallet>(`/admin/crypto-wallets/${id}`),
-    createWallet: (data: any) => apiRequest<CryptoWallet>("/admin/crypto-wallets", {
+    getWallets: () => apiRequest<CryptoWallet[]>("/admin/crypto-wallets/"),
+    getWallet: (id: number) => apiRequest<CryptoWallet>(`/admin/crypto-wallets/${id}/`),
+    createWallet: (data: any) => apiRequest<CryptoWallet>("/admin/crypto-wallets/", {
         method: "POST",
         body: data instanceof FormData ? data : JSON.stringify(data)
     }),
-    updateWallet: (id: number, data: any) => apiRequest<CryptoWallet>(`/admin/crypto-wallets/${id}`, {
+    updateWallet: (id: number, data: any) => apiRequest<CryptoWallet>(`/admin/crypto-wallets/${id}/`, {
         method: "PATCH",
         body: data instanceof FormData ? data : JSON.stringify(data)
     }),
-    deleteWallet: (id: number) => apiRequest(`/admin/crypto-wallets/${id}`, {
+    deleteWallet: (id: number) => apiRequest(`/admin/crypto-wallets/${id}/`, {
         method: "DELETE"
     }),
-    toggleWallet: (id: number) => apiRequest<CryptoWallet>(`/admin/crypto-wallets/${id}/toggle`, {
+    toggleWallet: (id: number) => apiRequest<CryptoWallet>(`/admin/crypto-wallets/${id}/toggle/`, {
         method: "POST"
     }),
 
     // Deposit verification
     getDeposits: (status?: string) => {
         const query = status ? `?status=${status}` : "";
-        return apiRequest<CryptoDeposit[]>(`/admin/crypto-deposits${query}`);
+        return apiRequest<CryptoDeposit[]>(`/admin/crypto-deposits/${query}`);
     },
     verifyDeposit: (id: number, action: "approve" | "reject", notes: string) =>
-        apiRequest<CryptoDeposit>(`/admin/crypto-deposits/${id}/verify`, {
+        apiRequest<CryptoDeposit>(`/admin/crypto-deposits/${id}/verify/`, {
             method: "POST",
             body: JSON.stringify({ action, admin_notes: notes })
         })

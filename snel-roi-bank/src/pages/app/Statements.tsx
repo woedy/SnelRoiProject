@@ -20,7 +20,7 @@ const Statements = () => {
   const [year, setYear] = useState<string>('2024');
 
   const loadStatements = () => {
-    apiRequest<Statement[]>('/statements').then(setStatements);
+    apiRequest<Statement[]>('/statements/').then(setStatements);
   };
 
   useEffect(() => {
@@ -36,7 +36,7 @@ const Statements = () => {
       const today = new Date();
       const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const end = new Date(today.getFullYear(), today.getMonth(), 0);
-      await apiRequest('/statements/generate', {
+      await apiRequest('/statements/generate/', {
         method: 'POST',
         body: JSON.stringify({
           period_start: start.toISOString().slice(0, 10),

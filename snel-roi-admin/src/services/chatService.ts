@@ -64,34 +64,34 @@ class ChatService {
     private typingTimeout: NodeJS.Timeout | null = null;
 
     async getOrCreateConversation(): Promise<SupportConversation> {
-        return await apiRequest<SupportConversation>('/support/conversations', {
+        return await apiRequest<SupportConversation>('/support/conversations/', {
             method: 'POST',
             body: JSON.stringify({}),
         });
     }
 
     async getConversations(): Promise<ConversationListItem[]> {
-        return await apiRequest<ConversationListItem[]>('/support/conversations');
+        return await apiRequest<ConversationListItem[]>('/support/conversations/');
     }
 
     async getConversation(conversationId: number): Promise<SupportConversation> {
-        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}`);
+        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}/`);
     }
 
     async sendMessage(conversationId: number, message: string): Promise<SupportMessage> {
-        return await apiRequest<SupportMessage>(`/support/conversations/${conversationId}/messages`, {
+        return await apiRequest<SupportMessage>(`/support/conversations/${conversationId}/messages/`, {
             method: 'POST',
             body: JSON.stringify({ message }),
         });
     }
 
     async getUnreadCount(): Promise<number> {
-        const response = await apiRequest<{ unread_count: number }>('/support/unread-count');
+        const response = await apiRequest<{ unread_count: number }>('/support/unread-count/');
         return response.unread_count;
     }
 
     async updateConversationStatus(conversationId: number, status: string): Promise<SupportConversation> {
-        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}`, {
+        return await apiRequest<SupportConversation>(`/support/conversations/${conversationId}/`, {
             method: 'PATCH',
             body: JSON.stringify({ status }),
         });

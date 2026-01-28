@@ -30,7 +30,7 @@ const Transfer = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    apiRequest<Beneficiary[]>('/beneficiaries').then(setBeneficiaries).catch(() => setBeneficiaries([]));
+    apiRequest<Beneficiary[]>('/beneficiaries/').then(setBeneficiaries).catch(() => setBeneficiaries([]));
   }, []);
 
   const handleBeneficiarySelect = (id: string) => {
@@ -56,7 +56,7 @@ const Transfer = () => {
       if (!targetAccount) {
         throw new Error('Recipient account is required');
       }
-      const response = await apiRequest<{ reference: string }>(`/transfers`, {
+      const response = await apiRequest<{ reference: string }>(`/transfers/`, {
         method: 'POST',
         body: JSON.stringify({ amount, memo: note, target_account_number: targetAccount }),
       });

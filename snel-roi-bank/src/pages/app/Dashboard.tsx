@@ -69,7 +69,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiRequest<DashboardData>('/dashboard')
+    apiRequest<DashboardData>('/dashboard/')
       .then(setDashboard)
       .finally(() => setLoading(false));
   }, []);

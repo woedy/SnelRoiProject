@@ -19,7 +19,9 @@ class CustomerProfile(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     full_name = models.CharField(max_length=255)
+    middle_name = models.CharField(max_length=100, blank=True)
     phone = models.CharField(max_length=40, blank=True)
+    country = models.CharField(max_length=100, blank=True)
     preferred_language = models.CharField(max_length=10, default='en')
     kyc_status = models.CharField(max_length=20, choices=KYC_CHOICES, default='PENDING')
     tier = models.CharField(max_length=20, choices=TIER_CHOICES, default='STANDARD')
@@ -30,8 +32,12 @@ class CustomerProfile(models.Model):
 
 class Account(models.Model):
     TYPE_CHOICES = [
-        ('CHECKING', 'Checking'),
-        ('SAVINGS', 'Savings'),
+        ('CHECKING', 'Checking Account'),
+        ('SAVINGS', 'Savings Account'),
+        ('FIXED_DEPOSIT', 'Fixed Deposit Account'),
+        ('CURRENT', 'Current Account'),
+        ('BUSINESS', 'Business Account'),
+        ('INVESTMENT', 'Investment Account'),
         ('SYSTEM', 'System'),
     ]
     STATUS_CHOICES = [

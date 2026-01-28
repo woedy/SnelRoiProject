@@ -121,21 +121,90 @@ class AdminUserUpdateSerializer(serializers.Serializer):
 
 
 class RegisterSerializer(serializers.Serializer):
+    # Personal Information
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    middle_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    username = serializers.CharField(max_length=150)
+    
+    # Contact Information
     email = serializers.EmailField()
+    phone = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    
+    # Account Setup
+    currency = serializers.CharField(max_length=3, default='USD')
+    account_type = serializers.ChoiceField(
+        choices=[
+            ('CHECKING', 'Checking Account'),
+            ('SAVINGS', 'Savings Account'),
+            ('CURRENT', 'Current Account'),
+            ('BUSINESS', 'Business Account'),
+        ],
+        default='CHECKING'
+    )
+    
+    # Security
     password = serializers.CharField(write_only=True)
-    full_name = serializers.CharField()
+    confirm_password = serializers.CharField(write_only=True)
+    terms_accepted = serializers.BooleanField()
+
+    def validate_username(self, value):
+        User = get_user_model()
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists.")
+        return value
+
+    def validate_email(self, value):
+        User = get_user_model()
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists.")
+        return value
+
+    def validate(self, data):
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError("Passwords do not match.")
+        
+        if not data.get('terms_accepted', False):
+            raise serializers.ValidationError("You must accept the terms and conditions.")
+        
+        return data
 
     def create(self, validated_data):
+        # Remove confirm_password and terms_accepted as they're not needed for user creation
+        validated_data.pop('confirm_password', None)
+        validated_data.pop('terms_accepted', None)
+        
+        # Create full name from individual name parts
+        full_name_parts = [validated_data['first_name']]
+        if validated_data.get('middle_name'):
+            full_name_parts.append(validated_data['middle_name'])
+        full_name_parts.append(validated_data['last_name'])
+        full_name = ' '.join(full_name_parts)
+        
+        # Create user
         user = User.objects.create_user(
-            username=validated_data['email'],
+            username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
-            first_name=validated_data['full_name'].split(' ')[0],
-            last_name=' '.join(validated_data['full_name'].split(' ')[1:]),
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
             is_active=False,
         )
-        profile = CustomerProfile.objects.create(user=user, full_name=validated_data['full_name'])
-        create_customer_account(user)
+        
+        # Create customer profile
+        profile = CustomerProfile.objects.create(
+            user=user,
+            full_name=full_name,
+            phone=validated_data.get('phone', ''),
+            country=validated_data.get('country', ''),
+            middle_name=validated_data.get('middle_name', '')
+        )
+        
+        # Create customer account with specified type and currency
+        from .services import create_customer_account
+        create_customer_account(user, account_type=validated_data.get('account_type', 'CHECKING'), currency=validated_data.get('currency', 'USD'))
+        
         return user
 
 
@@ -144,7 +213,17 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
+        from django.contrib.auth import authenticate, get_user_model
+        User = get_user_model()
+        
+        try:
+            # Find user by email first
+            user_obj = User.objects.get(email=data['email'])
+            # Then authenticate using their username
+            user = authenticate(username=user_obj.username, password=data['password'])
+        except User.DoesNotExist:
+            user = None
+            
         if not user:
             raise serializers.ValidationError('Invalid credentials')
         data['user'] = user

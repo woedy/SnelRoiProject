@@ -11,6 +11,7 @@ interface AuthContextType {
   requestPasswordReset: (email: string) => Promise<void>;
   confirmPasswordReset: (email: string, code: string, newPassword: string) => Promise<void>;
   logout: () => void;
+  handleAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,20 +22,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
   const [user, setUser] = useState<AuthContextType['user']>(null);
 
+  const handleAuthError = () => {
+    setIsAuthenticated(false);
+    setUser(null);
+    localStorage.removeItem('snel-roi-token');
+    localStorage.removeItem('snel-roi-refresh-token');
+    // Redirect to login page
+    window.location.href = '/login';
+  };
+
   const login = async (email: string, password: string) => {
-    const data = await apiRequest<{ access: string }>('/auth/login', {
+    const data = await apiRequest<{ access: string; refresh: string }>('/auth/login/', {
       method: 'POST',
       auth: false,
       body: JSON.stringify({ email, password }),
     });
     localStorage.setItem('snel-roi-token', data.access);
-    const me = await apiRequest<AuthContextType['user']>('/me');
+    localStorage.setItem('snel-roi-refresh-token', data.refresh);
+    const me = await apiRequest<AuthContextType['user']>('/me/');
     setUser(me);
     setIsAuthenticated(true);
   };
 
   const register = async (email: string, password: string, fullName: string) => {
-    const data = await apiRequest<{ email: string }>('/auth/register', {
+    const data = await apiRequest<{ email: string }>('/auth/register/', {
       method: 'POST',
       auth: false,
       body: JSON.stringify({ email, password, full_name: fullName }),
@@ -43,19 +54,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const verifyEmail = async (email: string, code: string) => {
-    const data = await apiRequest<{ access: string }>('/auth/verify-email', {
+    const data = await apiRequest<{ access: string; refresh: string }>('/auth/verify-email/', {
       method: 'POST',
       auth: false,
       body: JSON.stringify({ email, code }),
     });
     localStorage.setItem('snel-roi-token', data.access);
-    const me = await apiRequest<AuthContextType['user']>('/me');
+    localStorage.setItem('snel-roi-refresh-token', data.refresh);
+    const me = await apiRequest<AuthContextType['user']>('/me/');
     setUser(me);
     setIsAuthenticated(true);
   };
 
   const resendVerification = async (email: string) => {
-    await apiRequest('/auth/verify-email/resend', {
+    await apiRequest('/auth/verify-email/resend/', {
       method: 'POST',
       auth: false,
       body: JSON.stringify({ email }),
@@ -63,7 +75,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const requestPasswordReset = async (email: string) => {
-    await apiRequest('/auth/password-reset/request', {
+    await apiRequest('/auth/password-reset/request/', {
       method: 'POST',
       auth: false,
       body: JSON.stringify({ email }),
@@ -71,7 +83,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const confirmPasswordReset = async (email: string, code: string, newPassword: string) => {
-    await apiRequest('/auth/password-reset/confirm', {
+    await apiRequest('/auth/password-reset/confirm/', {
       method: 'POST',
       auth: false,
       body: JSON.stringify({ email, code, new_password: newPassword }),
@@ -82,26 +94,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(false);
     setUser(null);
     localStorage.removeItem('snel-roi-token');
+    localStorage.removeItem('snel-roi-refresh-token');
   };
 
   useEffect(() => {
     const token = localStorage.getItem('snel-roi-token');
     if (token) {
-      apiRequest<AuthContextType['user']>('/me')
+      apiRequest<AuthContextType['user']>('/me/')
         .then((me) => {
           setUser(me);
           setIsAuthenticated(true);
         })
-        .catch(() => {
-          setIsAuthenticated(false);
-          setUser(null);
-          localStorage.removeItem('snel-roi-token');
+        .catch((error) => {
+          console.error('Auth check failed:', error);
+          // Only clear auth state if it's an auth error
+          if (error.message.includes('Authentication credentials were not provided') || 
+              error.message.includes('Invalid token') ||
+              error.message.includes('Token')) {
+            handleAuthError();
+          }
         });
     }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, register, verifyEmail, resendVerification, requestPasswordReset, confirmPasswordReset, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, register, verifyEmail, resendVerification, requestPasswordReset, confirmPasswordReset, logout, handleAuthError }}>
       {children}
     </AuthContext.Provider>
   );

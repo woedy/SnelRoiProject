@@ -13,13 +13,13 @@ export interface Account {
 
 export const accountService = {
   getAll: async () => {
-    return apiRequest<Account[]>("/admin/accounts");
+    return apiRequest<Account[]>("/admin/accounts/");
   },
   getOne: async (id: number) => {
-    return apiRequest<Account>(`/admin/accounts/${id}`);
+    return apiRequest<Account>(`/admin/accounts/${id}/`);
   },
   update: async (id: number, data: Partial<Account>) => {
-    return apiRequest<Account>(`/admin/accounts/${id}`, {
+    return apiRequest<Account>(`/admin/accounts/${id}/`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
