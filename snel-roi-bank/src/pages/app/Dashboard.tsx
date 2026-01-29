@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { TransactionIcon } from '@/components/TransactionIcon';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -66,6 +67,7 @@ interface DashboardData {
 const Dashboard = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -171,39 +173,65 @@ const Dashboard = () => {
               </div>
             </div>
             
-            {/* Add Money and Send Money Buttons */}
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <Link to="/app/deposit" className="flex-1 sm:flex-none">
-                <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
-                  <ArrowDownToLine className="h-4 w-4 mr-2" />
-                  {t('nav.deposit')}
-                </Button>
-              </Link>
-              <Link to="/app/transfer" className="flex-1 sm:flex-none">
-                <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
-                  <Send className="h-4 w-4 mr-2" />
-                  {t('nav.transfer')}
-                </Button>
-              </Link>
-            </div>
+            {/* Add Money and Send Money Buttons - Desktop Only */}
+            {!isMobile && (
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                <Link to="/app/deposit" className="flex-1 sm:flex-none">
+                  <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
+                    <ArrowDownToLine className="h-4 w-4 mr-2" />
+                    {t('nav.deposit')}
+                  </Button>
+                </Link>
+                <Link to="/app/transfer" className="flex-1 sm:flex-none">
+                  <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
+                    <Send className="h-4 w-4 mr-2" />
+                    {t('nav.transfer')}
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="bg-card rounded-2xl p-6 shadow-card">
           <h3 className="font-semibold text-foreground mb-4">{t('dashboard.quickActions')}</h3>
-          <div className="space-y-3">
-            {quickActions.map((action, index) => (
-              <Link key={index} to={action.path}>
-                <Button variant="ghost" className="w-full justify-start h-auto py-3 hover:bg-secondary">
-                  <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center mr-3`}>
-                    <action.icon className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">{action.label}</span>
-                  <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
-                </Button>
-              </Link>
-            ))}
-          </div>
+          
+          {/* Mobile: Icon Grid Layout */}
+          {isMobile ? (
+            <div className="grid grid-cols-3 gap-4">
+              {quickActions.map((action, index) => (
+                <Link key={index} to={action.path} className="flex flex-col items-center">
+                  <Button 
+                    variant="ghost" 
+                    size="lg"
+                    className="w-16 h-16 rounded-2xl p-0 hover:bg-secondary flex-col gap-1"
+                  >
+                    <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center`}>
+                      <action.icon className="h-5 w-5" />
+                    </div>
+                  </Button>
+                  <span className="text-xs font-medium text-center mt-2 text-muted-foreground leading-tight">
+                    {action.label}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            /* Desktop: Full Width Buttons */
+            <div className="space-y-3">
+              {quickActions.map((action, index) => (
+                <Link key={index} to={action.path}>
+                  <Button variant="ghost" className="w-full justify-start h-auto py-3 hover:bg-secondary">
+                    <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center mr-3`}>
+                      <action.icon className="h-5 w-5" />
+                    </div>
+                    <span className="font-medium">{action.label}</span>
+                    <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
