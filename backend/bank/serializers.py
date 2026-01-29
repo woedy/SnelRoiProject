@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument
 from .services import create_customer_account
 
 User = get_user_model()
@@ -280,10 +280,97 @@ class StatementSerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    profile_completion_percentage = serializers.ReadOnlyField()
+    kyc_status_display = serializers.CharField(source='get_kyc_status_display', read_only=True)
+    tier_display = serializers.CharField(source='get_tier_display', read_only=True)
+    gender_display = serializers.CharField(source='get_gender_display', read_only=True)
 
     class Meta:
         model = CustomerProfile
-        fields = ['full_name', 'phone', 'preferred_language', 'kyc_status', 'tier', 'user']
+        fields = [
+            'full_name', 'middle_name', 'phone', 'country', 'preferred_language',
+            'date_of_birth', 'gender', 'gender_display', 'nationality', 'occupation',
+            'address_line_1', 'address_line_2', 'city', 'state_province', 'postal_code',
+            'kyc_status', 'kyc_status_display', 'kyc_submitted_at', 'kyc_verified_at',
+            'kyc_rejection_reason', 'tier', 'tier_display', 'profile_completion_percentage',
+            'created_at', 'updated_at', 'user'
+        ]
+        read_only_fields = [
+            'kyc_status', 'kyc_submitted_at', 'kyc_verified_at', 'kyc_rejection_reason',
+            'tier', 'profile_completion_percentage', 'created_at', 'updated_at'
+        ]
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        # Recalculate profile completion after update
+        instance.calculate_profile_completion()
+        return instance
+
+
+class KYCDocumentSerializer(serializers.ModelSerializer):
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    document_url = serializers.SerializerMethodField()
+    file_size = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KYCDocument
+        fields = [
+            'id', 'document_type', 'document_type_display', 'document_file',
+            'document_url', 'document_number', 'status', 'status_display',
+            'rejection_reason', 'verified_by', 'verified_at', 'admin_notes',
+            'uploaded_at', 'updated_at', 'expires_at', 'file_size'
+        ]
+        read_only_fields = [
+            'id', 'status', 'rejection_reason', 'verified_by', 'verified_at',
+            'admin_notes', 'uploaded_at', 'updated_at'
+        ]
+
+    def get_document_url(self, obj):
+        if obj.document_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.document_file.url)
+        return None
+
+    def get_file_size(self, obj):
+        if obj.document_file:
+            try:
+                return obj.document_file.size
+            except:
+                return None
+        return None
+
+
+class KYCDocumentUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KYCDocument
+        fields = ['document_type', 'document_file', 'document_number']
+
+    def validate_document_file(self, value):
+        # Validate file size (max 10MB)
+        if value.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("File size cannot exceed 10MB")
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
+        if hasattr(value, 'content_type') and value.content_type not in allowed_types:
+            raise serializers.ValidationError("Only JPEG, PNG, and PDF files are allowed")
+        
+        return value
+
+    def create(self, validated_data):
+        # Get customer from context
+        customer = self.context['request'].user.profile
+        validated_data['customer'] = customer
+        
+        # Delete existing document of same type if exists
+        KYCDocument.objects.filter(
+            customer=customer,
+            document_type=validated_data['document_type']
+        ).delete()
+        
+        return super().create(validated_data)
 
 
 from decimal import Decimal

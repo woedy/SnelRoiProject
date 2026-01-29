@@ -67,4 +67,14 @@ urlpatterns = [
     path('support/conversations/<int:pk>/', views.SupportConversationDetailView.as_view()),
     path('support/conversations/<int:conversation_id>/messages/', views.SendSupportMessageView.as_view()),
     path('support/unread-count/', views.SupportUnreadCountView.as_view()),
+    
+    # KYC Document Endpoints
+    path('kyc/documents/', views.KYCDocumentsView.as_view()),
+    path('kyc/documents/<int:pk>/', views.KYCDocumentDetailView.as_view()),
+    path('kyc/submit/', views.KYCSubmitView.as_view()),
+    
+    # Admin KYC Endpoints
+    path('admin/kyc/documents/', views.AdminKYCDocumentsView.as_view()),
+    path('admin/kyc/documents/<int:pk>/', views.AdminKYCDocumentDetailView.as_view()),
+    path('admin/kyc/profiles/', views.AdminKYCProfilesView.as_view()),
 ]

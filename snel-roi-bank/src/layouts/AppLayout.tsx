@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ChatWidget } from '@/components/chat/ChatWidget';
+import { UserProfileDropdown } from '@/components/UserProfileDropdown';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -20,6 +21,7 @@ import {
   Menu,
   X,
   CreditCard,
+  HelpCircle,
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -43,6 +45,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { path: '/app/transactions', icon: List, label: t('nav.transactions') },
     { path: '/app/profile', icon: User, label: t('nav.profile') },
     { path: '/app/settings', icon: Settings, label: t('nav.settings') },
+    { path: '/app/help', icon: HelpCircle, label: 'Help & Support' },
   ];
 
   const handleLogout = () => {
@@ -174,12 +177,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <div className="flex items-center gap-4">
               <ThemeToggle variant="compact" />
               <LanguageSwitch variant="compact" />
-              <div className="flex items-center gap-2">
-                <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-sm">
-                  {user?.avatar}
-                </div>
-                <span className="hidden sm:block text-sm font-medium">{user?.name}</span>
-              </div>
+              <UserProfileDropdown />
             </div>
           </div>
         </header>

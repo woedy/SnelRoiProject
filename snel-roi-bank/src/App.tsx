@@ -44,6 +44,7 @@ import Transactions from "./pages/app/Transactions";
 import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
 import VirtualCards from "./pages/app/VirtualCards";
+import Help from "./pages/app/Help";
 
 const queryClient = new QueryClient();
 
@@ -111,6 +112,7 @@ const App = () => (
                 <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />
                 <Route path="/app/profile" element={<AppLayout><Profile /></AppLayout>} />
                 <Route path="/app/settings" element={<AppLayout><Settings /></AppLayout>} />
+                <Route path="/app/help" element={<AppLayout><Help /></AppLayout>} />
 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

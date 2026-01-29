@@ -12,24 +12,133 @@ User = get_user_model()
 class CustomerProfile(models.Model):
     KYC_CHOICES = [
         ('PENDING', 'Pending'),
+        ('UNDER_REVIEW', 'Under Review'),
         ('VERIFIED', 'Verified'),
+        ('REJECTED', 'Rejected'),
     ]
     TIER_CHOICES = [
         ('STANDARD', 'Standard'),
         ('PREMIUM', 'Premium'),
+        ('VIP', 'VIP'),
+    ]
+    GENDER_CHOICES = [
+        ('M', 'Male'),
+        ('F', 'Female'),
+        ('O', 'Other'),
+        ('', 'Prefer not to say'),
     ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    
+    # Basic Information
     full_name = models.CharField(max_length=255)
     middle_name = models.CharField(max_length=100, blank=True)
     phone = models.CharField(max_length=40, blank=True)
     country = models.CharField(max_length=100, blank=True)
     preferred_language = models.CharField(max_length=10, default='en')
+    
+    # Extended Profile Information
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True)
+    nationality = models.CharField(max_length=100, blank=True)
+    occupation = models.CharField(max_length=100, blank=True)
+    
+    # Address Information
+    address_line_1 = models.CharField(max_length=255, blank=True)
+    address_line_2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state_province = models.CharField(max_length=100, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    
+    # KYC and Account Status
     kyc_status = models.CharField(max_length=20, choices=KYC_CHOICES, default='PENDING')
+    kyc_submitted_at = models.DateTimeField(null=True, blank=True)
+    kyc_verified_at = models.DateTimeField(null=True, blank=True)
+    kyc_verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_profiles')
+    kyc_rejection_reason = models.TextField(blank=True)
+    
     tier = models.CharField(max_length=20, choices=TIER_CHOICES, default='STANDARD')
+    
+    # Profile completion tracking
+    profile_completion_percentage = models.IntegerField(default=0)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.full_name
+    
+    def calculate_profile_completion(self):
+        """Calculate profile completion percentage"""
+        fields_to_check = [
+            'full_name', 'phone', 'country', 'date_of_birth', 'gender',
+            'nationality', 'occupation', 'address_line_1', 'city',
+            'state_province', 'postal_code'
+        ]
+        
+        completed_fields = 0
+        for field in fields_to_check:
+            if getattr(self, field):
+                completed_fields += 1
+        
+        # Add KYC documents check
+        if self.kyc_documents.filter(status='APPROVED').exists():
+            completed_fields += 2  # Weight KYC documents more
+            
+        total_fields = len(fields_to_check) + 2
+        percentage = int((completed_fields / total_fields) * 100)
+        
+        if percentage != self.profile_completion_percentage:
+            self.profile_completion_percentage = percentage
+            self.save(update_fields=['profile_completion_percentage'])
+            
+        return percentage
+
+
+class KYCDocument(models.Model):
+    """KYC documents uploaded by customers for verification"""
+    DOCUMENT_TYPE_CHOICES = [
+        ('PASSPORT', 'Passport'),
+        ('NATIONAL_ID', 'National ID Card'),
+        ('DRIVERS_LICENSE', 'Driver\'s License'),
+        ('UTILITY_BILL', 'Utility Bill'),
+        ('BANK_STATEMENT', 'Bank Statement'),
+        ('PROOF_OF_ADDRESS', 'Proof of Address'),
+        ('SELFIE', 'Selfie with ID'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('EXPIRED', 'Expired'),
+    ]
+    
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='kyc_documents')
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPE_CHOICES)
+    document_file = models.FileField(upload_to='kyc_documents/')
+    document_number = models.CharField(max_length=100, blank=True, help_text="Document ID/Number if applicable")
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    rejection_reason = models.TextField(blank=True)
+    
+    # Admin verification fields
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_documents')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True)
+    
+    # Timestamps
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Document expiry date if applicable")
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+        unique_together = ['customer', 'document_type']  # One document per type per customer
+    
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.get_document_type_display()}"
 
 
 class Account(models.Model):

@@ -14,7 +14,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -25,6 +25,8 @@ from .serializers import (
     AdminUserUpdateSerializer,
     BeneficiarySerializer,
     ExternalTransferSerializer,
+    KYCDocumentSerializer,
+    KYCDocumentUploadSerializer,
     LedgerEntrySerializer,
     ProfileSerializer,
     RegisterSerializer,
@@ -1428,3 +1430,267 @@ class AdminVirtualCardApprovalView(APIView):
             'detail': message,
             'card': response_serializer.data
         })
+
+
+# ============ KYC Document Views ============
+
+class KYCDocumentsView(APIView):
+    """List and upload KYC documents"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Get user's KYC documents"""
+        documents = KYCDocument.objects.filter(customer=request.user.profile).order_by('-uploaded_at')
+        serializer = KYCDocumentSerializer(documents, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Upload a new KYC document"""
+        serializer = KYCDocumentUploadSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        document = serializer.save()
+        
+        # Recalculate profile completion
+        request.user.profile.calculate_profile_completion()
+        
+        return Response(
+            KYCDocumentSerializer(document, context={'request': request}).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class KYCDocumentDetailView(APIView):
+    """Get, update, or delete a specific KYC document"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, pk, user):
+        try:
+            return KYCDocument.objects.get(pk=pk, customer=user.profile)
+        except KYCDocument.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get KYC document details"""
+        document = self.get_object(pk, request.user)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = KYCDocumentSerializer(document, context={'request': request})
+        return Response(serializer.data)
+
+    def delete(self, request, pk):
+        """Delete a KYC document (only if pending)"""
+        document = self.get_object(pk, request.user)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if document.status != 'PENDING':
+            return Response(
+                {'detail': 'Cannot delete document that has been reviewed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        document.delete()
+        
+        # Recalculate profile completion
+        request.user.profile.calculate_profile_completion()
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KYCSubmitView(APIView):
+    """Submit KYC for review"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        """Submit KYC documents for review"""
+        profile = request.user.profile
+        
+        # Check if profile has required information
+        required_fields = ['full_name', 'phone', 'date_of_birth', 'address_line_1', 'city', 'country']
+        missing_fields = []
+        
+        for field in required_fields:
+            if not getattr(profile, field):
+                missing_fields.append(field.replace('_', ' ').title())
+        
+        if missing_fields:
+            return Response(
+                {
+                    'detail': 'Please complete your profile before submitting KYC',
+                    'missing_fields': missing_fields
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if required documents are uploaded
+        required_doc_types = ['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE']  # At least one ID
+        address_doc_types = ['UTILITY_BILL', 'BANK_STATEMENT', 'PROOF_OF_ADDRESS']  # At least one address proof
+        
+        user_docs = KYCDocument.objects.filter(customer=profile)
+        uploaded_types = list(user_docs.values_list('document_type', flat=True))
+        
+        has_id_doc = any(doc_type in uploaded_types for doc_type in required_doc_types)
+        has_address_doc = any(doc_type in uploaded_types for doc_type in address_doc_types)
+        
+        if not has_id_doc:
+            return Response(
+                {'detail': 'Please upload at least one ID document (Passport, National ID, or Driver\'s License)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not has_address_doc:
+            return Response(
+                {'detail': 'Please upload at least one proof of address document'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update KYC status
+        profile.kyc_status = 'UNDER_REVIEW'
+        profile.kyc_submitted_at = timezone.now()
+        profile.save(update_fields=['kyc_status', 'kyc_submitted_at'])
+        
+        return Response({
+            'detail': 'KYC submitted successfully for review',
+            'kyc_status': profile.kyc_status
+        })
+
+
+# ============ Admin KYC Views ============
+
+class AdminKYCDocumentsView(APIView):
+    """Admin view for managing KYC documents"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        """List all KYC documents with filters"""
+        documents = KYCDocument.objects.select_related('customer', 'customer__user').order_by('-uploaded_at')
+        
+        # Filter by status
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            documents = documents.filter(status=status_filter)
+        
+        # Filter by customer
+        customer_filter = request.query_params.get('customer')
+        if customer_filter:
+            documents = documents.filter(
+                Q(customer__full_name__icontains=customer_filter) |
+                Q(customer__user__email__icontains=customer_filter)
+            )
+        
+        serializer = KYCDocumentSerializer(documents, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminKYCDocumentDetailView(APIView):
+    """Admin view for managing specific KYC document"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        try:
+            return KYCDocument.objects.select_related('customer', 'customer__user').get(pk=pk)
+        except KYCDocument.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get KYC document details"""
+        document = self.get_object(pk)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = KYCDocumentSerializer(document, context={'request': request})
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Approve or reject KYC document"""
+        document = self.get_object(pk)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        action = request.data.get('action')  # 'approve' or 'reject'
+        admin_notes = request.data.get('admin_notes', '')
+        rejection_reason = request.data.get('rejection_reason', '')
+
+        if action not in ['approve', 'reject']:
+            return Response(
+                {'detail': 'Action must be either "approve" or "reject"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if action == 'reject' and not rejection_reason:
+            return Response(
+                {'detail': 'Rejection reason is required when rejecting a document'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update document status
+        document.status = 'APPROVED' if action == 'approve' else 'REJECTED'
+        document.rejection_reason = rejection_reason if action == 'reject' else ''
+        document.admin_notes = admin_notes
+        document.verified_by = request.user
+        document.verified_at = timezone.now()
+        document.save()
+
+        # Check if all required documents are approved for KYC completion
+        if action == 'approve':
+            customer = document.customer
+            required_doc_types = ['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE']
+            address_doc_types = ['UTILITY_BILL', 'BANK_STATEMENT', 'PROOF_OF_ADDRESS']
+            
+            approved_docs = KYCDocument.objects.filter(customer=customer, status='APPROVED')
+            approved_types = list(approved_docs.values_list('document_type', flat=True))
+            
+            has_approved_id = any(doc_type in approved_types for doc_type in required_doc_types)
+            has_approved_address = any(doc_type in approved_types for doc_type in address_doc_types)
+            
+            if has_approved_id and has_approved_address:
+                # All required documents approved - verify KYC
+                customer.kyc_status = 'VERIFIED'
+                customer.kyc_verified_at = timezone.now()
+                customer.kyc_verified_by = request.user
+                customer.save(update_fields=['kyc_status', 'kyc_verified_at', 'kyc_verified_by'])
+                
+                # Send verification email
+                from .emails import send_account_active_email
+                send_account_active_email.delay(customer.user.id)
+
+        serializer = KYCDocumentSerializer(document, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminKYCProfilesView(APIView):
+    """Admin view for managing customer KYC profiles"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        """List customer profiles with KYC status"""
+        profiles = CustomerProfile.objects.select_related('user').order_by('-kyc_submitted_at')
+        
+        # Filter by KYC status
+        status_filter = request.query_params.get('kyc_status')
+        if status_filter:
+            profiles = profiles.filter(kyc_status=status_filter)
+        
+        # Filter by customer
+        customer_filter = request.query_params.get('customer')
+        if customer_filter:
+            profiles = profiles.filter(
+                Q(full_name__icontains=customer_filter) |
+                Q(user__email__icontains=customer_filter)
+            )
+        
+        serializer = ProfileSerializer(profiles, many=True, context={'request': request})
+        return Response(serializer.data)
