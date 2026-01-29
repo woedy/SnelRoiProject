@@ -87,8 +87,8 @@
     --popover: 222 47% 9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 222 47% 11%;
+    --primary-foreground: 210 40% 98%;
 
     --secondary: 222 47% 15%;
     --secondary-foreground: 210 40% 98%;
@@ -102,11 +102,26 @@
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 40% 98%;
 
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    --pending: 38 92% 50%;
+
     --border: 222 47% 18%;
     --input: 222 47% 18%;
     --ring: 160 84% 39%;
 
-    --sidebar-background: 222 47% 6%;
+    /* Dark mode gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(222, 47%, 11%) 0%, hsl(215, 50%, 8%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(160, 84%, 39%) 0%, hsl(160, 84%, 30%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(222, 47%, 6%) 0%, hsl(215, 25%, 8%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(222, 47%, 9%) 0%, hsl(215, 20%, 12%) 100%);
+    --gradient-glass: linear-gradient(135deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.7) 100%);
+
+    --sidebar-background: 222 47% 4%;
     --sidebar-foreground: 210 40% 98%;
     --sidebar-primary: 160 84% 39%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -192,15 +207,32 @@
     box-shadow: var(--shadow-card);
   }
 
+  .dark .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border;
+  }
+
   .banking-card {
     @apply relative overflow-hidden rounded-2xl p-6;
     background: var(--gradient-primary);
+    color: white !important;
+  }
+
+  .banking-card * {
+    color: white !important;
   }
 
   .banking-card::before {
     content: '';
     @apply absolute inset-0 opacity-10;
     background: radial-gradient(circle at 100% 0%, rgba(255,255,255,0.3) 0%, transparent 50%);
+  }
+
+  .dark .banking-card {
+    @apply text-white;
+  }
+
+  .dark .banking-card::before {
+    background: radial-gradient(circle at 100% 0%, rgba(255,255,255,0.1) 0%, transparent 50%);
   }
 }
 

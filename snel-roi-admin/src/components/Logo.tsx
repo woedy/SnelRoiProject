@@ -5,9 +5,10 @@ import SnelLogo from '@/assets/snel logo.png';
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
   variant?: 'light' | 'dark';
+  linkTo?: string;
 }
 
-export const Logo: React.FC<LogoProps> = ({ size = 'md', variant = 'dark' }) => {
+export const Logo: React.FC<LogoProps> = ({ size = 'md', variant = 'dark', linkTo = '/' }) => {
   const sizes = {
     sm: 'h-8',
     md: 'h-10',
@@ -23,7 +24,7 @@ export const Logo: React.FC<LogoProps> = ({ size = 'md', variant = 'dark' }) => 
   const textColor = variant === 'light' ? 'text-primary-foreground' : 'text-primary';
 
   return (
-    <Link to="/" className="flex items-center gap-3 group">
+    <Link to={linkTo} className="flex items-center gap-3 group">
       <img 
         src={SnelLogo} 
         alt="Snel ROI Logo" 
@@ -34,7 +35,7 @@ export const Logo: React.FC<LogoProps> = ({ size = 'md', variant = 'dark' }) => 
           Snel ROI
         </span>
         <span className={`text-sm ${textColor} opacity-70 transition-opacity group-hover:opacity-90 mt-1`}>
-          Banking
+          Admin
         </span>
       </div>
     </Link>

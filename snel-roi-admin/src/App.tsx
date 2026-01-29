@@ -8,6 +8,7 @@ import Users from "./pages/Users";
 import Accounts from "./pages/Accounts";
 import CryptoWallets from "./pages/CryptoWallets";
 import CustomerSupport from "./pages/CustomerSupport";
+import VirtualCardsFixed from "./pages/VirtualCardsFixed";
 
 // Placeholders for other routes
 // Placeholders for other routes
@@ -24,6 +25,7 @@ function App() {
           <Route path="users" element={<Users />} />
           <Route path="accounts" element={<Accounts />} />
           <Route path="transactions" element={<Transactions />} />
+          <Route path="virtual-cards" element={<VirtualCardsFixed />} />
           <Route path="crypto-wallets" element={<CryptoWallets />} />
           <Route path="support" element={<CustomerSupport />} />
           <Route path="settings" element={<SettingsPage />} />

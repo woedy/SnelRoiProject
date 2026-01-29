@@ -1,15 +1,17 @@
-import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin, MessageSquare, CreditCard as VirtualCard } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { chatService } from "@/services/chatService";
 import { Badge } from "@/components/ui/badge";
+import { Logo } from "@/components/Logo";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
   { icon: Users, label: "Users", href: "/users" },
   { icon: Wallet, label: "Accounts", href: "/accounts" },
   { icon: CreditCard, label: "Transactions", href: "/transactions" },
+  { icon: VirtualCard, label: "Virtual Cards", href: "/virtual-cards" },
   { icon: Bitcoin, label: "Crypto Wallets", href: "/crypto-wallets" },
   { icon: MessageSquare, label: "Support", href: "/support" },
   { icon: Settings, label: "Settings", href: "/settings" },
@@ -36,9 +38,7 @@ export function Sidebar() {
   return (
     <div className="flex h-screen w-64 flex-col border-r border-border/50 bg-sidebar/95 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60">
       <div className="flex h-16 items-center px-6 border-b border-border/50">
-        <span className="text-xl font-bold font-display tracking-tight bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-          SnelROI Admin
-        </span>
+        <Logo variant="dark" size="sm" linkTo="/" />
       </div>
       <div className="flex-1 overflow-auto py-6">
         <nav className="grid items-start px-4 text-sm font-medium gap-2">

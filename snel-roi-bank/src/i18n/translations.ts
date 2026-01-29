@@ -25,6 +25,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.transactions': 'Transactions',
     'nav.profile': 'Profile',
     'nav.settings': 'Settings',
+    'nav.virtualCards': 'Virtual Cards',
     'nav.logout': 'Log out',
 
     // Hero
@@ -186,6 +187,9 @@ export const translations: Record<Language, Record<string, string>> = {
     // Settings
     'settings.title': 'Settings',
     'settings.language': 'Language',
+    'settings.theme': 'Theme',
+    'settings.lightMode': 'Light Mode',
+    'settings.darkMode': 'Dark Mode',
     'settings.notifications': 'Notifications',
     'settings.security': 'Security',
     'settings.twoFactor': 'Two-Factor Authentication',
@@ -545,6 +549,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.transactions': 'Transaktionen',
     'nav.profile': 'Profil',
     'nav.settings': 'Einstellungen',
+    'nav.virtualCards': 'Virtuelle Karten',
     'nav.logout': 'Abmelden',
 
     // Hero
@@ -701,6 +706,9 @@ export const translations: Record<Language, Record<string, string>> = {
     // Settings
     'settings.title': 'Einstellungen',
     'settings.language': 'Sprache',
+    'settings.theme': 'Design',
+    'settings.lightMode': 'Heller Modus',
+    'settings.darkMode': 'Dunkler Modus',
     'settings.notifications': 'Benachrichtigungen',
     'settings.security': 'Sicherheit',
     'settings.twoFactor': 'Zwei-Faktor-Authentifizierung',
@@ -1025,6 +1033,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.transactions': 'Transacciones',
     'nav.profile': 'Perfil',
     'nav.settings': 'Ajustes',
+    'nav.virtualCards': 'Tarjetas Virtuales',
     'nav.logout': 'Cerrar sesión',
 
     // Hero
@@ -1181,6 +1190,9 @@ export const translations: Record<Language, Record<string, string>> = {
     // Settings
     'settings.title': 'Ajustes',
     'settings.language': 'Idioma',
+    'settings.theme': 'Tema',
+    'settings.lightMode': 'Modo Claro',
+    'settings.darkMode': 'Modo Oscuro',
     'settings.notifications': 'Notificaciones',
     'settings.security': 'Seguridad',
     'settings.twoFactor': 'Autenticación de dos factores',
@@ -1505,6 +1517,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.transactions': 'Transactions',
     'nav.profile': 'Profil',
     'nav.settings': 'Paramètres',
+    'nav.virtualCards': 'Cartes Virtuelles',
     'nav.logout': 'Déconnexion',
 
     // Hero
@@ -1662,6 +1675,9 @@ export const translations: Record<Language, Record<string, string>> = {
     // Settings
     'settings.title': 'Paramètres',
     'settings.language': 'Langue',
+    'settings.theme': 'Thème',
+    'settings.lightMode': 'Mode Clair',
+    'settings.darkMode': 'Mode Sombre',
     'settings.notifications': 'Notifications',
     'settings.security': 'Sécurité',
     'settings.twoFactor': 'Authentification à deux facteurs',

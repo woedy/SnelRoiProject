@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { PublicLayout } from "@/layouts/PublicLayout";
 import { AppLayout } from "@/layouts/AppLayout";
 import { useEffect } from "react";
@@ -42,6 +43,7 @@ import Statements from "./pages/app/Statements";
 import Transactions from "./pages/app/Transactions";
 import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
+import VirtualCards from "./pages/app/VirtualCards";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +57,18 @@ const ScrollToTop = () => {
   return null;
 };
 
+// Wrapper component to conditionally apply theme provider
+const ConditionalThemeProvider = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const isAppRoute = location.pathname.startsWith('/app/');
+  
+  if (isAppRoute) {
+    return <ThemeProvider>{children}</ThemeProvider>;
+  }
+  
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
@@ -64,41 +78,44 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <ScrollToTop />
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<PublicLayout><Index /></PublicLayout>} />
-              <Route path="/features" element={<PublicLayout><Features /></PublicLayout>} />
-              <Route path="/features/dashboard" element={<PublicLayout><DashboardFeature /></PublicLayout>} />
-              <Route path="/features/transfers" element={<PublicLayout><TransfersFeature /></PublicLayout>} />
-              <Route path="/features/savings" element={<PublicLayout><SavingsFeature /></PublicLayout>} />
-              <Route path="/features/security" element={<PublicLayout><SecurityFeature /></PublicLayout>} />
-              <Route path="/features/statements" element={<PublicLayout><StatementsFeature /></PublicLayout>} />
-              <Route path="/features/multilang" element={<PublicLayout><MultilangFeature /></PublicLayout>} />
-              <Route path="/features/mobile" element={<PublicLayout><MobileFeature /></PublicLayout>} />
-              <Route path="/features/global" element={<PublicLayout><GlobalFeature /></PublicLayout>} />
-              <Route path="/features/virtual-cards" element={<PublicLayout><VirtualCardsFeature /></PublicLayout>} />
-              <Route path="/security" element={<PublicLayout><Security /></PublicLayout>} />
-              <Route path="/faq" element={<PublicLayout><FAQ /></PublicLayout>} />
-              <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/verify-email" element={<VerifyEmail />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
+            <ConditionalThemeProvider>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<PublicLayout><Index /></PublicLayout>} />
+                <Route path="/features" element={<PublicLayout><Features /></PublicLayout>} />
+                <Route path="/features/dashboard" element={<PublicLayout><DashboardFeature /></PublicLayout>} />
+                <Route path="/features/transfers" element={<PublicLayout><TransfersFeature /></PublicLayout>} />
+                <Route path="/features/savings" element={<PublicLayout><SavingsFeature /></PublicLayout>} />
+                <Route path="/features/security" element={<PublicLayout><SecurityFeature /></PublicLayout>} />
+                <Route path="/features/statements" element={<PublicLayout><StatementsFeature /></PublicLayout>} />
+                <Route path="/features/multilang" element={<PublicLayout><MultilangFeature /></PublicLayout>} />
+                <Route path="/features/mobile" element={<PublicLayout><MobileFeature /></PublicLayout>} />
+                <Route path="/features/global" element={<PublicLayout><GlobalFeature /></PublicLayout>} />
+                <Route path="/features/virtual-cards" element={<PublicLayout><VirtualCardsFeature /></PublicLayout>} />
+                <Route path="/security" element={<PublicLayout><Security /></PublicLayout>} />
+                <Route path="/faq" element={<PublicLayout><FAQ /></PublicLayout>} />
+                <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/verify-email" element={<VerifyEmail />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
 
-              {/* App Routes */}
-              <Route path="/app/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-              <Route path="/app/deposit" element={<AppLayout><Deposit /></AppLayout>} />
-              <Route path="/app/transfer" element={<AppLayout><Transfer /></AppLayout>} />
-              <Route path="/app/external-transfer" element={<AppLayout><ExternalTransfer /></AppLayout>} />
-              <Route path="/app/withdraw" element={<AppLayout><Withdraw /></AppLayout>} />
-              <Route path="/app/statements" element={<AppLayout><Statements /></AppLayout>} />
-              <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />
-              <Route path="/app/profile" element={<AppLayout><Profile /></AppLayout>} />
-              <Route path="/app/settings" element={<AppLayout><Settings /></AppLayout>} />
+                {/* App Routes */}
+                <Route path="/app/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+                <Route path="/app/deposit" element={<AppLayout><Deposit /></AppLayout>} />
+                <Route path="/app/transfer" element={<AppLayout><Transfer /></AppLayout>} />
+                <Route path="/app/external-transfer" element={<AppLayout><ExternalTransfer /></AppLayout>} />
+                <Route path="/app/withdraw" element={<AppLayout><Withdraw /></AppLayout>} />
+                <Route path="/app/virtual-cards" element={<AppLayout><VirtualCards /></AppLayout>} />
+                <Route path="/app/statements" element={<AppLayout><Statements /></AppLayout>} />
+                <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />
+                <Route path="/app/profile" element={<AppLayout><Profile /></AppLayout>} />
+                <Route path="/app/settings" element={<AppLayout><Settings /></AppLayout>} />
 
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </ConditionalThemeProvider>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>

@@ -1,9 +1,10 @@
+from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard
 from .services import create_customer_account
 
 User = get_user_model()
@@ -521,3 +522,92 @@ class SendMessageSerializer(serializers.Serializer):
             raise serializers.ValidationError("Message cannot be empty")
         return value.strip()
 
+
+class VirtualCardSerializer(serializers.ModelSerializer):
+    """Serializer for virtual cards"""
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    account_number = serializers.CharField(source='linked_account.account_number', read_only=True)
+    account_balance = serializers.DecimalField(source='linked_account.balance', max_digits=12, decimal_places=2, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    card_type_display = serializers.CharField(source='get_card_type_display', read_only=True)
+    masked_number = serializers.CharField(read_only=True)
+    last_four = serializers.CharField(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = VirtualCard
+        fields = [
+            'id', 'customer_name', 'customer_email', 'account_number', 'account_balance',
+            'card_number', 'masked_number', 'last_four', 'card_holder_name',
+            'expiry_month', 'expiry_year', 'cvv', 'card_type', 'card_type_display',
+            'status', 'status_display', 'daily_limit', 'monthly_limit',
+            'is_online_enabled', 'is_contactless_enabled', 'is_international_enabled',
+            'is_expired', 'approved_by', 'approved_at', 'admin_notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'customer_name', 'customer_email', 'account_number', 'account_balance',
+            'card_number', 'masked_number', 'last_four', 'card_holder_name',
+            'expiry_month', 'expiry_year', 'cvv', 'status_display', 'card_type_display',
+            'is_expired', 'approved_by', 'approved_at', 'created_at', 'updated_at'
+        ]
+
+
+class VirtualCardCreateSerializer(serializers.Serializer):
+    """Serializer for creating virtual card applications"""
+    card_type = serializers.ChoiceField(choices=VirtualCard.CARD_TYPE_CHOICES, default='STANDARD')
+    daily_limit = serializers.DecimalField(max_digits=12, decimal_places=2, default=Decimal('1000.00'), min_value=Decimal('100.00'), max_value=Decimal('5000.00'))
+    monthly_limit = serializers.DecimalField(max_digits=12, decimal_places=2, default=Decimal('10000.00'), min_value=Decimal('1000.00'), max_value=Decimal('50000.00'))
+    is_international_enabled = serializers.BooleanField(default=False)
+
+    def validate(self, data):
+        if data['daily_limit'] * 30 > data['monthly_limit']:
+            raise serializers.ValidationError("Daily limit multiplied by 30 cannot exceed monthly limit")
+        return data
+
+
+class VirtualCardUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating virtual card settings"""
+    
+    class Meta:
+        model = VirtualCard
+        fields = [
+            'daily_limit', 'monthly_limit', 'is_online_enabled',
+            'is_contactless_enabled', 'is_international_enabled'
+        ]
+
+    def validate_daily_limit(self, value):
+        if value < Decimal('100') or value > Decimal('5000'):
+            raise serializers.ValidationError("Daily limit must be between $100 and $5,000")
+        return value
+
+    def validate_monthly_limit(self, value):
+        if value < Decimal('1000') or value > Decimal('50000'):
+            raise serializers.ValidationError("Monthly limit must be between $1,000 and $50,000")
+        return value
+
+
+class AdminVirtualCardSerializer(VirtualCardSerializer):
+    """Admin serializer with additional fields for virtual cards"""
+    
+    class Meta(VirtualCardSerializer.Meta):
+        fields = VirtualCardSerializer.Meta.fields + ['admin_notes']
+        read_only_fields = [
+            'id', 'customer_name', 'customer_email', 'account_number', 'account_balance',
+            'card_number', 'masked_number', 'last_four', 'card_holder_name',
+            'expiry_month', 'expiry_year', 'cvv', 'status_display', 'card_type_display',
+            'is_expired', 'approved_by', 'approved_at', 'created_at', 'updated_at'
+        ]
+
+
+class VirtualCardApprovalSerializer(serializers.Serializer):
+    """Serializer for approving/declining virtual card applications"""
+    action = serializers.ChoiceField(choices=['approve', 'decline'])
+    admin_notes = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+    def validate_admin_notes(self, value):
+        action = self.initial_data.get('action')
+        if action == 'decline' and not value.strip():
+            raise serializers.ValidationError("Admin notes are required when declining an application")
+        return value.strip() if value else ''

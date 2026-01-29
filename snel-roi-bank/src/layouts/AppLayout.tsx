@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { ChatWidget } from '@/components/chat/ChatWidget';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
@@ -18,6 +19,7 @@ import {
   LogOut,
   Menu,
   X,
+  CreditCard,
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -36,6 +38,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { path: '/app/deposit', icon: ArrowDownToLine, label: t('nav.deposit') },
     { path: '/app/transfer', icon: Send, label: t('nav.transfer') },
     { path: '/app/withdraw', icon: ArrowUpFromLine, label: t('nav.withdraw') },
+    { path: '/app/virtual-cards', icon: CreditCard, label: t('nav.virtualCards') },
     { path: '/app/statements', icon: FileText, label: t('nav.statements') },
     { path: '/app/transactions', icon: List, label: t('nav.transactions') },
     { path: '/app/profile', icon: User, label: t('nav.profile') },
@@ -169,6 +172,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </div>
 
             <div className="flex items-center gap-4">
+              <ThemeToggle variant="compact" />
               <LanguageSwitch variant="compact" />
               <div className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium text-sm">

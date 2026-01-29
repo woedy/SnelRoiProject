@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   Snowflake,
+  Plus,
 } from 'lucide-react';
 
 interface Account {
@@ -143,7 +144,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="md:col-span-2 banking-card text-primary-foreground relative">
+        <div className="md:col-span-2 banking-card relative">
           <div className="relative z-10">
             <p className="text-sm opacity-70 mb-1">{t('dashboard.totalBalance')}</p>
             <p className="text-4xl lg:text-5xl font-bold mb-6">
@@ -247,10 +248,10 @@ const Dashboard = () => {
 
           {dashboard?.virtual_card ? (
             <div className="space-y-4">
-              <div className={`rounded-2xl p-5 text-primary-foreground banking-card ${isFrozen ? 'opacity-80' : ''}`}>
+              <div className={`rounded-2xl p-5 banking-card ${dashboard.virtual_card.is_frozen ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm opacity-70">Primary</p>
+                    <p className="text-sm opacity-70">{dashboard.virtual_card.card_type}</p>
                     <p className="mt-1 text-xl font-semibold tracking-wide">
                       {showCardDetails ? `**** **** **** ${dashboard.virtual_card.last_four}` : maskedPan(`0000 0000 0000 ${dashboard.virtual_card.last_four}`)}
                     </p>
@@ -266,7 +267,7 @@ const Dashboard = () => {
                   <div className="text-right">
                     <p className="text-xs opacity-70">{user?.username}</p>
                     <p className="text-sm font-medium mt-1">
-                      USD {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
+                      USD {dashboard.virtual_card.is_frozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
                     </p>
                   </div>
                 </div>
@@ -278,15 +279,26 @@ const Dashboard = () => {
                 </Button>
                 <Button variant="secondary" className="h-11" onClick={() => setIsFrozen((v) => !v)}>
                   <Snowflake className="h-4 w-4 mr-2" />
-                  {isFrozen ? t('dashboard.virtualCardUnfreeze') : t('dashboard.virtualCardFreeze')}
+                  {dashboard.virtual_card.is_frozen ? t('dashboard.virtualCardUnfreeze') : t('dashboard.virtualCardFreeze')}
                 </Button>
-                <Button variant="secondary" className="h-11">
-                  {t('dashboard.virtualCardCopy')}
-                </Button>
+                <Link to="/app/virtual-cards">
+                  <Button variant="secondary" className="h-11 w-full">
+                    {t('dashboard.virtualCardCopy')}
+                  </Button>
+                </Link>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No virtual card data yet.</p>
+            <div className="text-center py-8">
+              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-sm text-muted-foreground mb-4">No virtual cards yet</p>
+              <Link to="/app/virtual-cards">
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Apply for Card
+                </Button>
+              </Link>
+            </div>
           )}
         </div>
       </div>

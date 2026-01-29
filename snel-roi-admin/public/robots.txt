@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /
+
+# Admin interface should not be indexed by search engines
+# This is a private administrative dashboard

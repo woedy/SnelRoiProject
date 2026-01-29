@@ -14,7 +14,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -40,6 +40,11 @@ from .serializers import (
     SupportConversationListSerializer,
     SupportMessageSerializer,
     SendMessageSerializer,
+    VirtualCardSerializer,
+    VirtualCardCreateSerializer,
+    VirtualCardUpdateSerializer,
+    AdminVirtualCardSerializer,
+    VirtualCardApprovalSerializer,
 )
 from .services import (
     add_posting,
@@ -257,6 +262,22 @@ class DashboardView(APIView):
             verification_status__in=['PENDING_PAYMENT', 'PENDING_VERIFICATION', 'REJECTED']
         ).order_by('-created_at')[:5]
         
+        # Get primary virtual card
+        primary_card = VirtualCard.objects.filter(
+            customer=profile,
+            status__in=['ACTIVE', 'FROZEN']
+        ).first()
+        
+        virtual_card_data = None
+        if primary_card:
+            virtual_card_data = {
+                'id': primary_card.id,
+                'status': primary_card.status,
+                'last_four': primary_card.last_four,
+                'card_type': primary_card.card_type,
+                'is_frozen': primary_card.status == 'FROZEN',
+            }
+        
         total_balance = sum([account.balance() for account in accounts_qs])
         last_30_days = timezone.now() - timedelta(days=30)
         summary = LedgerPosting.objects.filter(
@@ -280,10 +301,7 @@ class DashboardView(APIView):
                 'debits_last_30_days': summary['debits'] or 0,
                 'credits_last_30_days': summary['credits'] or 0,
             },
-            'virtual_card': {
-                'status': 'ACTIVE',
-                'last_four': '1024',
-            },
+            'virtual_card': virtual_card_data,
         })
 
 
@@ -1136,3 +1154,277 @@ class SupportUnreadCountView(APIView):
         
         return Response({'unread_count': unread_count})
 
+
+# ============ Virtual Card Views ============
+
+class VirtualCardsView(APIView):
+    """List and create virtual cards"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """List user's virtual cards"""
+        cards = VirtualCard.objects.filter(customer=request.user.profile)
+        serializer = VirtualCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Apply for a new virtual card"""
+        # Check if user has an active account
+        try:
+            account = Account.objects.get(customer=request.user.profile, status='ACTIVE')
+        except Account.DoesNotExist:
+            return Response(
+                {'detail': 'You must have an active account to apply for a virtual card'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if user already has a pending application
+        pending_cards = VirtualCard.objects.filter(
+            customer=request.user.profile,
+            status='PENDING'
+        ).count()
+        
+        if pending_cards > 0:
+            return Response(
+                {'detail': 'You already have a pending virtual card application'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check card limit (max 3 cards per customer)
+        total_cards = VirtualCard.objects.filter(
+            customer=request.user.profile,
+            status__in=['ACTIVE', 'FROZEN']
+        ).count()
+        
+        if total_cards >= 3:
+            return Response(
+                {'detail': 'Maximum of 3 virtual cards allowed per customer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VirtualCardCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Create virtual card application
+        card = VirtualCard.objects.create(
+            customer=request.user.profile,
+            linked_account=account,
+            **serializer.validated_data
+        )
+
+        response_serializer = VirtualCardSerializer(card)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class VirtualCardDetailView(APIView):
+    """Get, update, or delete a specific virtual card"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, pk, user):
+        try:
+            return VirtualCard.objects.get(pk=pk, customer=user.profile)
+        except VirtualCard.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get virtual card details"""
+        card = self.get_object(pk, request.user)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = VirtualCardSerializer(card)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update virtual card settings"""
+        card = self.get_object(pk, request.user)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status not in ['ACTIVE', 'FROZEN']:
+            return Response(
+                {'detail': 'Can only update active or frozen cards'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VirtualCardUpdateSerializer(card, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        response_serializer = VirtualCardSerializer(card)
+        return Response(response_serializer.data)
+
+    def delete(self, request, pk):
+        """Cancel virtual card"""
+        card = self.get_object(pk, request.user)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status == 'CANCELLED':
+            return Response(
+                {'detail': 'Card is already cancelled'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        card.status = 'CANCELLED'
+        card.save(update_fields=['status', 'updated_at'])
+
+        return Response({'detail': 'Virtual card cancelled successfully'})
+
+
+class VirtualCardToggleFreezeView(APIView):
+    """Freeze or unfreeze a virtual card"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            card = VirtualCard.objects.get(pk=pk, customer=request.user.profile)
+        except VirtualCard.DoesNotExist:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status not in ['ACTIVE', 'FROZEN']:
+            return Response(
+                {'detail': 'Can only freeze/unfreeze active or frozen cards'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Toggle freeze status
+        if card.status == 'ACTIVE':
+            card.status = 'FROZEN'
+            message = 'Virtual card frozen successfully'
+        else:
+            card.status = 'ACTIVE'
+            message = 'Virtual card unfrozen successfully'
+
+        card.save(update_fields=['status', 'updated_at'])
+
+        serializer = VirtualCardSerializer(card)
+        return Response({
+            'detail': message,
+            'card': serializer.data
+        })
+
+
+# ============ Admin Virtual Card Views ============
+
+class AdminVirtualCardsView(APIView):
+    """Admin view for managing all virtual cards"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get(self, request):
+        """List all virtual cards with filters"""
+        cards = VirtualCard.objects.select_related('customer', 'linked_account').all()
+        
+        # Apply filters
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            cards = cards.filter(status=status_filter)
+        
+        customer_filter = request.query_params.get('customer')
+        if customer_filter:
+            cards = cards.filter(
+                Q(customer__full_name__icontains=customer_filter) |
+                Q(customer__user__email__icontains=customer_filter)
+            )
+
+        serializer = AdminVirtualCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+
+class AdminVirtualCardDetailView(APIView):
+    """Admin view for managing specific virtual card"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        try:
+            return VirtualCard.objects.select_related('customer', 'linked_account').get(pk=pk)
+        except VirtualCard.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get virtual card details"""
+        card = self.get_object(pk)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AdminVirtualCardSerializer(card)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update virtual card (admin notes only)"""
+        card = self.get_object(pk)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        admin_notes = request.data.get('admin_notes', '')
+        card.admin_notes = admin_notes
+        card.save(update_fields=['admin_notes', 'updated_at'])
+
+        serializer = AdminVirtualCardSerializer(card)
+        return Response(serializer.data)
+
+
+class AdminVirtualCardApprovalView(APIView):
+    """Admin approve/decline virtual card applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+            card = VirtualCard.objects.get(pk=pk)
+        except VirtualCard.DoesNotExist:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status != 'PENDING':
+            return Response(
+                {'detail': 'Can only approve/decline pending applications'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VirtualCardApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        action = serializer.validated_data['action']
+        admin_notes = serializer.validated_data.get('admin_notes', '')
+
+        if action == 'approve':
+            card.status = 'ACTIVE'
+            card.approved_by = request.user
+            card.approved_at = timezone.now()
+            message = 'Virtual card application approved'
+        else:
+            card.status = 'CANCELLED'
+            message = 'Virtual card application declined'
+
+        card.admin_notes = admin_notes
+        card.save(update_fields=['status', 'approved_by', 'approved_at', 'admin_notes', 'updated_at'])
+
+        # Send notification email (implement as needed)
+        # from .emails import send_virtual_card_status_email
+        # send_virtual_card_status_email.delay(card.customer.user.id, card.id, action)
+
+        response_serializer = AdminVirtualCardSerializer(card)
+        return Response({
+            'detail': message,
+            'card': response_serializer.data
+        })

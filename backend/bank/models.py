@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
+import random
+import string
 
 User = get_user_model()
 
@@ -288,4 +290,109 @@ class SupportMessage(models.Model):
     
     def __str__(self):
         return f"{self.conversation.id} - {self.sender_type} - {self.created_at}"
+
+
+class VirtualCard(models.Model):
+    """Virtual debit cards linked to customer accounts"""
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Approval'),
+        ('ACTIVE', 'Active'),
+        ('FROZEN', 'Frozen'),
+        ('CANCELLED', 'Cancelled'),
+        ('EXPIRED', 'Expired'),
+    ]
+    
+    CARD_TYPE_CHOICES = [
+        ('STANDARD', 'Standard'),
+        ('PREMIUM', 'Premium'),
+        ('BUSINESS', 'Business'),
+    ]
+    
+    # Core relationships
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='virtual_cards')
+    linked_account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='virtual_cards')
+    
+    # Card details
+    card_number = models.CharField(max_length=19, unique=True)  # 16 digits with spaces
+    card_holder_name = models.CharField(max_length=255)
+    expiry_month = models.IntegerField()
+    expiry_year = models.IntegerField()
+    cvv = models.CharField(max_length=3)
+    
+    # Card configuration
+    card_type = models.CharField(max_length=20, choices=CARD_TYPE_CHOICES, default='STANDARD')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    daily_limit = models.DecimalField(max_digits=12, decimal_places=2, default=1000.00)
+    monthly_limit = models.DecimalField(max_digits=12, decimal_places=2, default=10000.00)
+    
+    # Security and controls
+    is_online_enabled = models.BooleanField(default=True)
+    is_contactless_enabled = models.BooleanField(default=True)
+    is_international_enabled = models.BooleanField(default=False)
+    
+    # Admin fields
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_virtual_cards')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.customer.full_name} - **** {self.card_number[-4:]}"
+    
+    @property
+    def last_four(self):
+        """Return last 4 digits of card number"""
+        return self.card_number.replace(' ', '')[-4:]
+    
+    @property
+    def masked_number(self):
+        """Return masked card number showing only last 4 digits"""
+        return f"**** **** **** {self.last_four}"
+    
+    @property
+    def is_expired(self):
+        """Check if card is expired"""
+        from datetime import date
+        today = date.today()
+        return today.year > self.expiry_year or (today.year == self.expiry_year and today.month > self.expiry_month)
+    
+    def save(self, *args, **kwargs):
+        # Auto-generate card details if not provided
+        if not self.card_number:
+            self.card_number = self._generate_card_number()
+        if not self.cvv:
+            self.cvv = self._generate_cvv()
+        if not self.expiry_month or not self.expiry_year:
+            self._set_expiry_date()
+        if not self.card_holder_name:
+            self.card_holder_name = self.customer.full_name.upper()
+        
+        super().save(*args, **kwargs)
+    
+    def _generate_card_number(self):
+        """Generate a valid-looking card number (not real Visa/Mastercard)"""
+        # Use 5555 prefix for demo cards
+        prefix = "5555"
+        # Generate 12 random digits
+        middle = ''.join([str(random.randint(0, 9)) for _ in range(12)])
+        # Format with spaces
+        full_number = prefix + middle
+        return f"{full_number[:4]} {full_number[4:8]} {full_number[8:12]} {full_number[12:16]}"
+    
+    def _generate_cvv(self):
+        """Generate a 3-digit CVV"""
+        return ''.join([str(random.randint(0, 9)) for _ in range(3)])
+    
+    def _set_expiry_date(self):
+        """Set expiry date to 4 years from now"""
+        from datetime import date
+        today = date.today()
+        self.expiry_year = today.year + 4
+        self.expiry_month = today.month
 

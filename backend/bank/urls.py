@@ -48,6 +48,16 @@ urlpatterns = [
     path('admin/transactions/<int:pk>/decline/', views.AdminTransactionDeclineView.as_view()),
     path('admin/users/', views.AdminUsersView.as_view()),
     path('admin/users/<int:pk>/', views.AdminUserDetailView.as_view()),
+
+    # Virtual Card Endpoints
+    path('virtual-cards/', views.VirtualCardsView.as_view()),
+    path('virtual-cards/<int:pk>/', views.VirtualCardDetailView.as_view()),
+    path('virtual-cards/<int:pk>/toggle-freeze/', views.VirtualCardToggleFreezeView.as_view()),
+
+    # Admin Virtual Card Endpoints
+    path('admin/virtual-cards/', views.AdminVirtualCardsView.as_view()),
+    path('admin/virtual-cards/<int:pk>/', views.AdminVirtualCardDetailView.as_view()),
+    path('admin/virtual-cards/<int:pk>/approve/', views.AdminVirtualCardApprovalView.as_view()),
     path('admin/accounts/', views.AdminAccountsView.as_view()),
     path('admin/accounts/<int:pk>/', views.AdminAccountDetailView.as_view()),
     path('admin/audit/', views.AdminAuditView.as_view()),
