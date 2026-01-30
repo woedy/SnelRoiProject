@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
+import { useTheme } from '@/context/ThemeContext';
 import { languages } from '@/i18n/translations';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Globe, Bell, Shield, Sliders, Check } from 'lucide-react';
+import { Globe, Bell, Shield, Sliders, Check, Palette, Sun, Moon } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 const Settings = () => {
   const { t, language, setLanguage } = useLanguage();
+  const { theme, setTheme } = useTheme();
   const [notifications, setNotifications] = useState({
     email: true,
     push: true,
@@ -66,6 +68,47 @@ const Settings = () => {
                 )}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Theme Settings */}
+        <div className="bg-card rounded-2xl p-6 shadow-card">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+              <Palette className="h-5 w-5 text-accent" />
+            </div>
+            <h3 className="font-semibold text-foreground">{t('settings.theme')}</h3>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setTheme('light')}
+              className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                theme === 'light'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <Sun className="h-5 w-5" />
+              <span className="font-medium">{t('settings.lightMode')}</span>
+              {theme === 'light' && (
+                <Check className="h-4 w-4 text-primary ml-auto" />
+              )}
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                theme === 'dark'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <Moon className="h-5 w-5" />
+              <span className="font-medium">{t('settings.darkMode')}</span>
+              {theme === 'dark' && (
+                <Check className="h-4 w-4 text-primary ml-auto" />
+              )}
+            </button>
           </div>
         </div>
 

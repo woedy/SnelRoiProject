@@ -7,6 +7,11 @@ import Transactions from "./pages/Transactions";
 import Users from "./pages/Users";
 import Accounts from "./pages/Accounts";
 import CryptoWallets from "./pages/CryptoWallets";
+import CustomerSupport from "./pages/CustomerSupport";
+import VirtualCardsFixed from "./pages/VirtualCardsFixed";
+import LoanManagement from "./pages/LoanManagement";
+import KYCManagement from "./pages/KYCManagement";
+import TaxRefundManagement from "./pages/TaxRefundManagement";
 
 // Placeholders for other routes
 // Placeholders for other routes
@@ -23,7 +28,12 @@ function App() {
           <Route path="users" element={<Users />} />
           <Route path="accounts" element={<Accounts />} />
           <Route path="transactions" element={<Transactions />} />
+          <Route path="loans" element={<LoanManagement />} />
+          <Route path="virtual-cards" element={<VirtualCardsFixed />} />
           <Route path="crypto-wallets" element={<CryptoWallets />} />
+          <Route path="kyc" element={<KYCManagement />} />
+          <Route path="tax-refunds" element={<TaxRefundManagement />} />
+          <Route path="support" element={<CustomerSupport />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>

@@ -59,10 +59,10 @@ const Deposit = () => {
     const fetchStatusAndWallets = async () => {
       try {
         // Fetch dashboard to get account status
-        const dashboard = await apiRequest<any>('/dashboard');
+        const dashboard = await apiRequest<any>('/dashboard/');
         setIsFrozen(dashboard.account_status?.has_frozen_account || false);
 
-        const wallets = await apiRequest<CryptoWallet[]>('/crypto-wallets');
+        const wallets = await apiRequest<CryptoWallet[]>('/crypto-wallets/');
         setCryptoWallets(wallets);
       } catch (error) {
         console.error('Failed to fetch data', error);
@@ -151,7 +151,7 @@ const Deposit = () => {
         }
         setSelectedWallet(wallet);
 
-        const response = await apiRequest<CryptoDeposit>('/deposits/crypto/initiate', {
+        const response = await apiRequest<CryptoDeposit>('/deposits/crypto/initiate/', {
           method: 'POST',
           body: JSON.stringify({ 
             crypto_wallet_id: wallet.id,
@@ -162,7 +162,7 @@ const Deposit = () => {
         setStep('address');
       } else {
         // Regular deposit
-        const response = await apiRequest<{ reference: string }>('/deposits', {
+        const response = await apiRequest<{ reference: string }>('/deposits/', {
           method: 'POST',
           body: JSON.stringify({ amount, memo: method }),
         });
@@ -189,7 +189,7 @@ const Deposit = () => {
       if (txHash) formData.append('tx_hash', txHash);
 
       // Using Fetch directly because apiRequest might not handle FormData seamlessly unless updated
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/deposits/crypto/${activeDeposit.id}/upload-proof`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/deposits/crypto/${activeDeposit.id}/upload-proof/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('snel-roi-token')}`,

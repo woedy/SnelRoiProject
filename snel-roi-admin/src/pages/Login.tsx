@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { authService } from "@/services/authService";
+import { Logo } from "@/components/Logo";
 import { Loader2 } from "lucide-react";
 
 export default function Login() {
@@ -22,8 +23,7 @@ export default function Login() {
     const formData = new FormData(e.currentTarget);
     
     try {
-      const response = await authService.login(formData);
-      localStorage.setItem("admin_token", response.access);
+      await authService.login(formData);
       navigate(from, { replace: true });
     } catch (err) {
       setError("Invalid credentials or server error");
@@ -36,10 +36,13 @@ export default function Login() {
   return (
     <div className="flex h-screen w-full items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+        <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <Logo size="lg" linkTo="/login" />
+          </div>
+          <CardTitle className="text-2xl">Admin Login</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account.
+            Enter your admin credentials to access the dashboard.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

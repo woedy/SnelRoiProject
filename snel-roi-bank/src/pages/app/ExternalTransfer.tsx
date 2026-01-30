@@ -67,7 +67,7 @@ const ExternalTransfer = () => {
       // Add artificial delay to show loading state
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      const response = await apiRequest<{ reference: string }>(`/external-transfers`, {
+      const response = await apiRequest<{ reference: string }>(`/external-transfers/`, {
         method: 'POST',
         body: JSON.stringify({
           amount,

@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: python manage.py runserver 0.0.0.0:8000
+    command: daphne -b 0.0.0.0 -p 8000 banking.asgi:application
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-secret-key}
       DJANGO_DEBUG: 'true'

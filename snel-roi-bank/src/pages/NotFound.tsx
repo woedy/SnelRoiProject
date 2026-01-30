@@ -1,6 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useLanguage } from '@/context/LanguageContext';
+import { Logo } from '@/components/Logo';
 
 const NotFound = () => {
   const location = useLocation();
@@ -13,6 +14,9 @@ const NotFound = () => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted">
       <div className="text-center">
+        <div className="flex justify-center mb-8">
+          <Logo size="lg" />
+        </div>
         <h1 className="mb-4 text-4xl font-bold">{t('notfound.title')}</h1>
         <p className="mb-4 text-xl text-muted-foreground">{t('notfound.message')}</p>
         <a href="/" className="text-primary underline hover:text-primary/90">

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { TransactionIcon } from '@/components/TransactionIcon';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -17,6 +18,7 @@ import {
   Eye,
   EyeOff,
   Snowflake,
+  Plus,
 } from 'lucide-react';
 
 interface Account {
@@ -65,11 +67,12 @@ interface DashboardData {
 const Dashboard = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiRequest<DashboardData>('/dashboard')
+    apiRequest<DashboardData>('/dashboard/')
       .then(setDashboard)
       .finally(() => setLoading(false));
   }, []);
@@ -143,7 +146,7 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="md:col-span-2 banking-card text-primary-foreground relative">
+        <div className="md:col-span-2 banking-card relative">
           <div className="relative z-10">
             <p className="text-sm opacity-70 mb-1">{t('dashboard.totalBalance')}</p>
             <p className="text-4xl lg:text-5xl font-bold mb-6">
@@ -170,39 +173,65 @@ const Dashboard = () => {
               </div>
             </div>
             
-            {/* Add Money and Send Money Buttons */}
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <Link to="/app/deposit" className="flex-1 sm:flex-none">
-                <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
-                  <ArrowDownToLine className="h-4 w-4 mr-2" />
-                  {t('nav.deposit')}
-                </Button>
-              </Link>
-              <Link to="/app/transfer" className="flex-1 sm:flex-none">
-                <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
-                  <Send className="h-4 w-4 mr-2" />
-                  {t('nav.transfer')}
-                </Button>
-              </Link>
-            </div>
+            {/* Add Money and Send Money Buttons - Desktop Only */}
+            {!isMobile && (
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                <Link to="/app/deposit" className="flex-1 sm:flex-none">
+                  <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
+                    <ArrowDownToLine className="h-4 w-4 mr-2" />
+                    {t('nav.deposit')}
+                  </Button>
+                </Link>
+                <Link to="/app/transfer" className="flex-1 sm:flex-none">
+                  <Button className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border border-white/20 backdrop-blur-sm">
+                    <Send className="h-4 w-4 mr-2" />
+                    {t('nav.transfer')}
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="bg-card rounded-2xl p-6 shadow-card">
           <h3 className="font-semibold text-foreground mb-4">{t('dashboard.quickActions')}</h3>
-          <div className="space-y-3">
-            {quickActions.map((action, index) => (
-              <Link key={index} to={action.path}>
-                <Button variant="ghost" className="w-full justify-start h-auto py-3 hover:bg-secondary">
-                  <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center mr-3`}>
-                    <action.icon className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">{action.label}</span>
-                  <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
-                </Button>
-              </Link>
-            ))}
-          </div>
+          
+          {/* Mobile: Icon Grid Layout */}
+          {isMobile ? (
+            <div className="grid grid-cols-3 gap-4">
+              {quickActions.map((action, index) => (
+                <Link key={index} to={action.path} className="flex flex-col items-center">
+                  <Button 
+                    variant="ghost" 
+                    size="lg"
+                    className="w-16 h-16 rounded-2xl p-0 hover:bg-secondary flex-col gap-1"
+                  >
+                    <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center`}>
+                      <action.icon className="h-5 w-5" />
+                    </div>
+                  </Button>
+                  <span className="text-xs font-medium text-center mt-2 text-muted-foreground leading-tight">
+                    {action.label}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            /* Desktop: Full Width Buttons */
+            <div className="space-y-3">
+              {quickActions.map((action, index) => (
+                <Link key={index} to={action.path}>
+                  <Button variant="ghost" className="w-full justify-start h-auto py-3 hover:bg-secondary">
+                    <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center mr-3`}>
+                      <action.icon className="h-5 w-5" />
+                    </div>
+                    <span className="font-medium">{action.label}</span>
+                    <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -247,10 +276,10 @@ const Dashboard = () => {
 
           {dashboard?.virtual_card ? (
             <div className="space-y-4">
-              <div className={`rounded-2xl p-5 text-primary-foreground banking-card ${isFrozen ? 'opacity-80' : ''}`}>
+              <div className={`rounded-2xl p-5 banking-card ${dashboard.virtual_card.is_frozen ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm opacity-70">Primary</p>
+                    <p className="text-sm opacity-70">{dashboard.virtual_card.card_type}</p>
                     <p className="mt-1 text-xl font-semibold tracking-wide">
                       {showCardDetails ? `**** **** **** ${dashboard.virtual_card.last_four}` : maskedPan(`0000 0000 0000 ${dashboard.virtual_card.last_four}`)}
                     </p>
@@ -266,7 +295,7 @@ const Dashboard = () => {
                   <div className="text-right">
                     <p className="text-xs opacity-70">{user?.username}</p>
                     <p className="text-sm font-medium mt-1">
-                      USD {isFrozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
+                      USD {dashboard.virtual_card.is_frozen ? `• ${t('dashboard.virtualCardFrozen')}` : ''}
                     </p>
                   </div>
                 </div>
@@ -278,15 +307,26 @@ const Dashboard = () => {
                 </Button>
                 <Button variant="secondary" className="h-11" onClick={() => setIsFrozen((v) => !v)}>
                   <Snowflake className="h-4 w-4 mr-2" />
-                  {isFrozen ? t('dashboard.virtualCardUnfreeze') : t('dashboard.virtualCardFreeze')}
+                  {dashboard.virtual_card.is_frozen ? t('dashboard.virtualCardUnfreeze') : t('dashboard.virtualCardFreeze')}
                 </Button>
-                <Button variant="secondary" className="h-11">
-                  {t('dashboard.virtualCardCopy')}
-                </Button>
+                <Link to="/app/virtual-cards">
+                  <Button variant="secondary" className="h-11 w-full">
+                    {t('dashboard.virtualCardCopy')}
+                  </Button>
+                </Link>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No virtual card data yet.</p>
+            <div className="text-center py-8">
+              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-sm text-muted-foreground mb-4">No virtual cards yet</p>
+              <Link to="/app/virtual-cards">
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Apply for Card
+                </Button>
+              </Link>
+            </div>
           )}
         </div>
       </div>

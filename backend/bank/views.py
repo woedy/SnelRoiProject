@@ -10,9 +10,11 @@ from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -23,6 +25,8 @@ from .serializers import (
     AdminUserUpdateSerializer,
     BeneficiarySerializer,
     ExternalTransferSerializer,
+    KYCDocumentSerializer,
+    KYCDocumentUploadSerializer,
     LedgerEntrySerializer,
     ProfileSerializer,
     RegisterSerializer,
@@ -34,6 +38,32 @@ from .serializers import (
     CryptoDepositCreateSerializer,
     CryptoDepositProofUploadSerializer,
     CryptoDepositVerificationSerializer,
+    SupportConversationSerializer,
+    SupportConversationListSerializer,
+    SupportMessageSerializer,
+    SendMessageSerializer,
+    VirtualCardSerializer,
+    VirtualCardCreateSerializer,
+    VirtualCardUpdateSerializer,
+    AdminVirtualCardSerializer,
+    VirtualCardApprovalSerializer,
+    NotificationSerializer,
+    NotificationCreateSerializer,
+    NotificationUpdateSerializer,
+    LoanSerializer,
+    LoanApplicationSerializer,
+    LoanPaymentSerializer,
+    AdminLoanSerializer,
+    LoanApprovalSerializer,
+    LoanRejectionSerializer,
+    LoanPaymentRequestSerializer,
+    TaxRefundApplicationSerializer,
+    TaxRefundApplicationCreateSerializer,
+    TaxRefundCalculatorSerializer,
+    AdminTaxRefundApplicationSerializer,
+    TaxRefundApprovalSerializer,
+    TaxRefundDocumentSerializer,
+    TaxRefundDocumentUploadSerializer,
 )
 from .services import (
     add_posting,
@@ -73,7 +103,16 @@ class LoginView(APIView):
         user = None
         if email and password:
             from django.contrib.auth import authenticate
-            user = authenticate(username=email, password=password)
+            User = get_user_model()
+            
+            # First, find the user by email
+            try:
+                user_obj = User.objects.get(email=email)
+                # Then authenticate using their username
+                user = authenticate(username=user_obj.username, password=password)
+            except User.DoesNotExist:
+                user = None
+                
         if not user:
             if email:
                 User = get_user_model()
@@ -242,6 +281,22 @@ class DashboardView(APIView):
             verification_status__in=['PENDING_PAYMENT', 'PENDING_VERIFICATION', 'REJECTED']
         ).order_by('-created_at')[:5]
         
+        # Get primary virtual card
+        primary_card = VirtualCard.objects.filter(
+            customer=profile,
+            status__in=['ACTIVE', 'FROZEN']
+        ).first()
+        
+        virtual_card_data = None
+        if primary_card:
+            virtual_card_data = {
+                'id': primary_card.id,
+                'status': primary_card.status,
+                'last_four': primary_card.last_four,
+                'card_type': primary_card.card_type,
+                'is_frozen': primary_card.status == 'FROZEN',
+            }
+        
         total_balance = sum([account.balance() for account in accounts_qs])
         last_30_days = timezone.now() - timedelta(days=30)
         summary = LedgerPosting.objects.filter(
@@ -265,10 +320,7 @@ class DashboardView(APIView):
                 'debits_last_30_days': summary['debits'] or 0,
                 'credits_last_30_days': summary['credits'] or 0,
             },
-            'virtual_card': {
-                'status': 'ACTIVE',
-                'last_four': '1024',
-            },
+            'virtual_card': virtual_card_data,
         })
 
 
@@ -313,6 +365,17 @@ class DepositView(APIView):
         entry = create_entry('DEPOSIT', request.user, memo=memo)
         add_posting(entry, account, 'CREDIT', amount, 'Customer deposit')
         add_posting(entry, funding, 'DEBIT', amount, 'Funding source')
+        
+        # Create notification for the customer
+        from .services import create_transaction_notification
+        create_transaction_notification(
+            customer=profile,
+            transaction_type='DEPOSIT',
+            amount=amount,
+            status='PENDING',
+            reference=entry.reference
+        )
+        
         if settings.AUTO_APPROVE_DEPOSITS:
             auto_post_entry.apply_async((entry.id,), countdown=settings.TRANSACTION_REVIEW_DELAY_SECONDS)
         return Response(LedgerEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
@@ -434,7 +497,19 @@ class AdminTransactionApproveView(APIView):
         entry = LedgerEntry.objects.get(pk=pk)
         approve_entry(entry, request.user)
         
-        # Notify user
+        # Create notification for the customer
+        from .services import create_transaction_notification
+        customer = entry.postings.first().account.customer
+        amount = entry.postings.filter(direction='DEBIT').first().amount
+        create_transaction_notification(
+            customer=customer,
+            transaction_type=entry.entry_type,
+            amount=amount,
+            status='APPROVED',
+            reference=entry.reference
+        )
+        
+        # Notify user via email
         from .emails import send_transaction_status_email
         send_transaction_status_email.delay(entry.id, 'APPROVED')
         
@@ -448,7 +523,19 @@ class AdminTransactionDeclineView(APIView):
         entry = LedgerEntry.objects.get(pk=pk)
         decline_entry(entry, request.user)
         
-        # Notify user
+        # Create notification for the customer
+        from .services import create_transaction_notification
+        customer = entry.postings.first().account.customer
+        amount = entry.postings.filter(direction='DEBIT').first().amount
+        create_transaction_notification(
+            customer=customer,
+            transaction_type=entry.entry_type,
+            amount=amount,
+            status='DECLINED',
+            reference=entry.reference
+        )
+        
+        # Notify user via email
         from .emails import send_transaction_status_email
         send_transaction_status_email.delay(entry.id, 'DECLINED')
         
@@ -940,3 +1027,1767 @@ class AdminManualTransferView(APIView):
             'reference': entry.reference
         })
 
+
+# ============ Customer Support Chat Views ============
+
+class SupportConversationsView(APIView):
+    """List conversations (filtered by user type)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        
+        if user.is_staff:
+            # Admin sees all conversations
+            conversations = SupportConversation.objects.all()
+            status_filter = request.query_params.get('status')
+            if status_filter:
+                conversations = conversations.filter(status=status_filter)
+        else:
+            # Customer sees only their conversations
+            conversations = SupportConversation.objects.filter(customer=user.profile)
+        
+        serializer = SupportConversationListSerializer(
+            conversations, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    def post(self, request):
+        """Create a new conversation (customers only)"""
+        if request.user.is_staff:
+            return Response(
+                {'detail': 'Admins cannot create conversations'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get or create active conversation for this customer
+        conversation, created = SupportConversation.objects.get_or_create(
+            customer=request.user.profile,
+            status__in=['OPEN', 'IN_PROGRESS'],
+            defaults={'subject': 'Support Request'}
+        )
+        
+        serializer = SupportConversationSerializer(conversation, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class SupportConversationDetailView(APIView):
+    """Get conversation details with messages"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self, pk, user):
+        try:
+            conversation = SupportConversation.objects.get(pk=pk)
+            # Check permissions
+            if not user.is_staff and conversation.customer.user != user:
+                return None
+            return conversation
+        except SupportConversation.DoesNotExist:
+            return None
+    
+    def get(self, request, pk):
+        conversation = self.get_object(pk, request.user)
+        if not conversation:
+            return Response(
+                {'detail': 'Conversation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Mark messages as read
+        if request.user.is_staff:
+            # Admin marks customer messages as read
+            conversation.messages.filter(sender_type='CUSTOMER', is_read=False).update(is_read=True)
+        else:
+            # Customer marks admin messages as read
+            conversation.messages.filter(sender_type='ADMIN', is_read=False).update(is_read=True)
+        
+        serializer = SupportConversationSerializer(conversation, context={'request': request})
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Update conversation status (admin only)"""
+        if not request.user.is_staff:
+            return Response(
+                {'detail': 'Only admins can update conversation status'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        conversation = self.get_object(pk, request.user)
+        if not conversation:
+            return Response(
+                {'detail': 'Conversation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        new_status = request.data.get('status')
+        if new_status and new_status in dict(SupportConversation.STATUS_CHOICES):
+            conversation.status = new_status
+            conversation.save(update_fields=['status'])
+        
+        serializer = SupportConversationSerializer(conversation, context={'request': request})
+        return Response(serializer.data)
+
+
+class SendSupportMessageView(APIView):
+    """Send a message in a conversation"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, conversation_id):
+        try:
+            conversation = SupportConversation.objects.get(pk=conversation_id)
+        except SupportConversation.DoesNotExist:
+            return Response(
+                {'detail': 'Conversation not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check permissions
+        if not request.user.is_staff and conversation.customer.user != request.user:
+            return Response(
+                {'detail': 'You do not have permission to send messages in this conversation'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = SendMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Determine sender type
+        sender_type = 'ADMIN' if request.user.is_staff else 'CUSTOMER'
+        
+        # Create message
+        message = SupportMessage.objects.create(
+            conversation=conversation,
+            sender_type=sender_type,
+            sender_user=request.user,
+            message=serializer.validated_data['message']
+        )
+        
+        # Update conversation
+        conversation.last_message_at = timezone.now()
+        if conversation.status == 'OPEN' and sender_type == 'ADMIN':
+            conversation.status = 'IN_PROGRESS'
+        conversation.save(update_fields=['last_message_at', 'status'])
+        
+        response_serializer = SupportMessageSerializer(message)
+    
+        # Broadcast to WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{conversation_id}',
+            {
+                'type': 'chat_message',
+                'message': response_serializer.data
+            }
+        )
+    
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class SupportUnreadCountView(APIView):
+    """Get unread message count"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        if user.is_staff:
+            # Count unread customer messages across all conversations
+            unread_count = SupportMessage.objects.filter(
+                sender_type='CUSTOMER',
+                is_read=False
+            ).count()
+        else:
+            # Count unread admin messages in user's conversations
+            unread_count = SupportMessage.objects.filter(
+                conversation__customer=user.profile,
+                sender_type='ADMIN',
+                is_read=False
+            ).count()
+        
+        return Response({'unread_count': unread_count})
+
+
+# ============ Virtual Card Views ============
+
+class VirtualCardsView(APIView):
+    """List and create virtual cards"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """List user's virtual cards"""
+        cards = VirtualCard.objects.filter(customer=request.user.profile)
+        serializer = VirtualCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Apply for a new virtual card"""
+        # Check if user has an active account
+        try:
+            account = Account.objects.get(customer=request.user.profile, status='ACTIVE')
+        except Account.DoesNotExist:
+            return Response(
+                {'detail': 'You must have an active account to apply for a virtual card'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if user already has a pending application
+        pending_cards = VirtualCard.objects.filter(
+            customer=request.user.profile,
+            status='PENDING'
+        ).count()
+        
+        if pending_cards > 0:
+            return Response(
+                {'detail': 'You already have a pending virtual card application'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check card limit (max 3 cards per customer)
+        total_cards = VirtualCard.objects.filter(
+            customer=request.user.profile,
+            status__in=['ACTIVE', 'FROZEN']
+        ).count()
+        
+        if total_cards >= 3:
+            return Response(
+                {'detail': 'Maximum of 3 virtual cards allowed per customer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VirtualCardCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Create virtual card application
+        card = VirtualCard.objects.create(
+            customer=request.user.profile,
+            linked_account=account,
+            **serializer.validated_data
+        )
+
+        response_serializer = VirtualCardSerializer(card)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class VirtualCardDetailView(APIView):
+    """Get, update, or delete a specific virtual card"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, pk, user):
+        try:
+            return VirtualCard.objects.get(pk=pk, customer=user.profile)
+        except VirtualCard.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get virtual card details"""
+        card = self.get_object(pk, request.user)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = VirtualCardSerializer(card)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update virtual card settings"""
+        card = self.get_object(pk, request.user)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status not in ['ACTIVE', 'FROZEN']:
+            return Response(
+                {'detail': 'Can only update active or frozen cards'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VirtualCardUpdateSerializer(card, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        response_serializer = VirtualCardSerializer(card)
+        return Response(response_serializer.data)
+
+    def delete(self, request, pk):
+        """Cancel virtual card"""
+        card = self.get_object(pk, request.user)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status == 'CANCELLED':
+            return Response(
+                {'detail': 'Card is already cancelled'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        card.status = 'CANCELLED'
+        card.save(update_fields=['status', 'updated_at'])
+
+        return Response({'detail': 'Virtual card cancelled successfully'})
+
+
+class VirtualCardToggleFreezeView(APIView):
+    """Freeze or unfreeze a virtual card"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            card = VirtualCard.objects.get(pk=pk, customer=request.user.profile)
+        except VirtualCard.DoesNotExist:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status not in ['ACTIVE', 'FROZEN']:
+            return Response(
+                {'detail': 'Can only freeze/unfreeze active or frozen cards'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Toggle freeze status
+        if card.status == 'ACTIVE':
+            card.status = 'FROZEN'
+            message = 'Virtual card frozen successfully'
+        else:
+            card.status = 'ACTIVE'
+            message = 'Virtual card unfrozen successfully'
+
+        card.save(update_fields=['status', 'updated_at'])
+
+        serializer = VirtualCardSerializer(card)
+        return Response({
+            'detail': message,
+            'card': serializer.data
+        })
+
+
+# ============ Admin Virtual Card Views ============
+
+class AdminVirtualCardsView(APIView):
+    """Admin view for managing all virtual cards"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get(self, request):
+        """List all virtual cards with filters"""
+        cards = VirtualCard.objects.select_related('customer', 'linked_account').all()
+        
+        # Apply filters
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            cards = cards.filter(status=status_filter)
+        
+        customer_filter = request.query_params.get('customer')
+        if customer_filter:
+            cards = cards.filter(
+                Q(customer__full_name__icontains=customer_filter) |
+                Q(customer__user__email__icontains=customer_filter)
+            )
+
+        serializer = AdminVirtualCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+
+class AdminVirtualCardDetailView(APIView):
+    """Admin view for managing specific virtual card"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        try:
+            return VirtualCard.objects.select_related('customer', 'linked_account').get(pk=pk)
+        except VirtualCard.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get virtual card details"""
+        card = self.get_object(pk)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AdminVirtualCardSerializer(card)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update virtual card (admin notes only)"""
+        card = self.get_object(pk)
+        if not card:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        admin_notes = request.data.get('admin_notes', '')
+        card.admin_notes = admin_notes
+        card.save(update_fields=['admin_notes', 'updated_at'])
+
+        serializer = AdminVirtualCardSerializer(card)
+        return Response(serializer.data)
+
+
+class AdminVirtualCardApprovalView(APIView):
+    """Admin approve/decline virtual card applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+            card = VirtualCard.objects.get(pk=pk)
+        except VirtualCard.DoesNotExist:
+            return Response(
+                {'detail': 'Virtual card not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if card.status != 'PENDING':
+            return Response(
+                {'detail': 'Can only approve/decline pending applications'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = VirtualCardApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        action = serializer.validated_data['action']
+        admin_notes = serializer.validated_data.get('admin_notes', '')
+
+        if action == 'approve':
+            card.status = 'ACTIVE'
+            card.approved_by = request.user
+            card.approved_at = timezone.now()
+            message = 'Virtual card application approved'
+        else:
+            card.status = 'CANCELLED'
+            message = 'Virtual card application declined'
+
+        card.admin_notes = admin_notes
+        card.save(update_fields=['status', 'approved_by', 'approved_at', 'admin_notes', 'updated_at'])
+
+        # Send notification email (implement as needed)
+        # from .emails import send_virtual_card_status_email
+        # send_virtual_card_status_email.delay(card.customer.user.id, card.id, action)
+
+        response_serializer = AdminVirtualCardSerializer(card)
+        return Response({
+            'detail': message,
+            'card': response_serializer.data
+        })
+
+
+# ============ KYC Document Views ============
+
+class KYCDocumentsView(APIView):
+    """List and upload KYC documents"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Get user's KYC documents"""
+        documents = KYCDocument.objects.filter(customer=request.user.profile).order_by('-uploaded_at')
+        serializer = KYCDocumentSerializer(documents, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Upload a new KYC document"""
+        serializer = KYCDocumentUploadSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        document = serializer.save()
+        
+        # Recalculate profile completion
+        request.user.profile.calculate_profile_completion()
+        
+        return Response(
+            KYCDocumentSerializer(document, context={'request': request}).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class KYCDocumentDetailView(APIView):
+    """Get, update, or delete a specific KYC document"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, pk, user):
+        try:
+            return KYCDocument.objects.get(pk=pk, customer=user.profile)
+        except KYCDocument.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get KYC document details"""
+        document = self.get_object(pk, request.user)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = KYCDocumentSerializer(document, context={'request': request})
+        return Response(serializer.data)
+
+    def delete(self, request, pk):
+        """Delete a KYC document (only if pending)"""
+        document = self.get_object(pk, request.user)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if document.status != 'PENDING':
+            return Response(
+                {'detail': 'Cannot delete document that has been reviewed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        document.delete()
+        
+        # Recalculate profile completion
+        request.user.profile.calculate_profile_completion()
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KYCSubmitView(APIView):
+    """Submit KYC for review"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        """Submit KYC documents for review"""
+        profile = request.user.profile
+        
+        # Check if profile has required information
+        required_fields = ['full_name', 'phone', 'date_of_birth', 'address_line_1', 'city', 'country']
+        missing_fields = []
+        
+        for field in required_fields:
+            if not getattr(profile, field):
+                missing_fields.append(field.replace('_', ' ').title())
+        
+        if missing_fields:
+            return Response(
+                {
+                    'detail': 'Please complete your profile before submitting KYC',
+                    'missing_fields': missing_fields
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if required documents are uploaded
+        required_doc_types = ['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE']  # At least one ID
+        address_doc_types = ['UTILITY_BILL', 'BANK_STATEMENT', 'PROOF_OF_ADDRESS']  # At least one address proof
+        
+        user_docs = KYCDocument.objects.filter(customer=profile)
+        uploaded_types = list(user_docs.values_list('document_type', flat=True))
+        
+        has_id_doc = any(doc_type in uploaded_types for doc_type in required_doc_types)
+        has_address_doc = any(doc_type in uploaded_types for doc_type in address_doc_types)
+        
+        if not has_id_doc:
+            return Response(
+                {'detail': 'Please upload at least one ID document (Passport, National ID, or Driver\'s License)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not has_address_doc:
+            return Response(
+                {'detail': 'Please upload at least one proof of address document'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update KYC status
+        profile.kyc_status = 'UNDER_REVIEW'
+        profile.kyc_submitted_at = timezone.now()
+        profile.save(update_fields=['kyc_status', 'kyc_submitted_at'])
+        
+        return Response({
+            'detail': 'KYC submitted successfully for review',
+            'kyc_status': profile.kyc_status
+        })
+
+
+# ============ Admin KYC Views ============
+
+class AdminKYCDocumentsView(APIView):
+    """Admin view for managing KYC documents"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        """List all KYC documents with filters"""
+        documents = KYCDocument.objects.select_related('customer', 'customer__user').order_by('-uploaded_at')
+        
+        # Filter by status
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            documents = documents.filter(status=status_filter)
+        
+        # Filter by customer
+        customer_filter = request.query_params.get('customer')
+        if customer_filter:
+            documents = documents.filter(
+                Q(customer__full_name__icontains=customer_filter) |
+                Q(customer__user__email__icontains=customer_filter)
+            )
+        
+        serializer = KYCDocumentSerializer(documents, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminKYCDocumentDetailView(APIView):
+    """Admin view for managing specific KYC document"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        try:
+            return KYCDocument.objects.select_related('customer', 'customer__user').get(pk=pk)
+        except KYCDocument.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get KYC document details"""
+        document = self.get_object(pk)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = KYCDocumentSerializer(document, context={'request': request})
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Approve or reject KYC document"""
+        document = self.get_object(pk)
+        if not document:
+            return Response(
+                {'detail': 'Document not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        action = request.data.get('action')  # 'approve' or 'reject'
+        admin_notes = request.data.get('admin_notes', '')
+        rejection_reason = request.data.get('rejection_reason', '')
+
+        if action not in ['approve', 'reject']:
+            return Response(
+                {'detail': 'Action must be either "approve" or "reject"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if action == 'reject' and not rejection_reason:
+            return Response(
+                {'detail': 'Rejection reason is required when rejecting a document'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update document status
+        document.status = 'APPROVED' if action == 'approve' else 'REJECTED'
+        document.rejection_reason = rejection_reason if action == 'reject' else ''
+        document.admin_notes = admin_notes
+        document.verified_by = request.user
+        document.verified_at = timezone.now()
+        document.save()
+
+        # Check if all required documents are approved for KYC completion
+        if action == 'approve':
+            customer = document.customer
+            required_doc_types = ['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE']
+            address_doc_types = ['UTILITY_BILL', 'BANK_STATEMENT', 'PROOF_OF_ADDRESS']
+            
+            approved_docs = KYCDocument.objects.filter(customer=customer, status='APPROVED')
+            approved_types = list(approved_docs.values_list('document_type', flat=True))
+            
+            has_approved_id = any(doc_type in approved_types for doc_type in required_doc_types)
+            has_approved_address = any(doc_type in approved_types for doc_type in address_doc_types)
+            
+            if has_approved_id and has_approved_address:
+                # All required documents approved - verify KYC
+                customer.kyc_status = 'VERIFIED'
+                customer.kyc_verified_at = timezone.now()
+                customer.kyc_verified_by = request.user
+                customer.save(update_fields=['kyc_status', 'kyc_verified_at', 'kyc_verified_by'])
+                
+                # Send verification email
+                from .emails import send_account_active_email
+                send_account_active_email.delay(customer.user.id)
+
+        serializer = KYCDocumentSerializer(document, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminKYCProfilesView(APIView):
+    """Admin view for managing customer KYC profiles"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        """List customer profiles with KYC status"""
+        profiles = CustomerProfile.objects.select_related('user').order_by('-kyc_submitted_at')
+        
+        # Filter by KYC status
+        status_filter = request.query_params.get('kyc_status')
+        if status_filter:
+            profiles = profiles.filter(kyc_status=status_filter)
+        
+        # Filter by customer
+        customer_filter = request.query_params.get('customer')
+        if customer_filter:
+            profiles = profiles.filter(
+                Q(full_name__icontains=customer_filter) |
+                Q(user__email__icontains=customer_filter)
+            )
+        
+        serializer = ProfileSerializer(profiles, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminKYCProfileDetailView(APIView):
+    """Admin view for managing individual customer KYC profile"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def patch(self, request, pk):
+        """Verify or reject customer KYC profile"""
+        try:
+            profile = CustomerProfile.objects.get(pk=pk)
+        except CustomerProfile.DoesNotExist:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        action = request.data.get('action')
+        if action not in ['verify', 'reject']:
+            return Response({'detail': 'Invalid action. Must be "verify" or "reject"'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        if action == 'verify':
+            profile.kyc_status = 'VERIFIED'
+            profile.kyc_verified_at = timezone.now()
+            profile.kyc_verified_by = request.user
+            profile.kyc_rejection_reason = ''
+            
+            # Send verification email
+            from .emails import send_account_verification_email
+            send_account_verification_email(profile.user)
+            
+        elif action == 'reject':
+            rejection_reason = request.data.get('rejection_reason', '')
+            if not rejection_reason:
+                return Response({'detail': 'Rejection reason is required'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            profile.kyc_status = 'REJECTED'
+            profile.kyc_rejection_reason = rejection_reason
+            profile.kyc_verified_at = None
+            profile.kyc_verified_by = None
+            
+            # Send rejection email
+            from .emails import send_account_rejection_email
+            send_account_rejection_email(profile.user, rejection_reason)
+        
+        profile.save()
+        
+        # Create notification for the customer
+        from .services import create_notification
+        if action == 'verify':
+            create_notification(
+                profile,
+                'Account Verified',
+                'Your account has been successfully verified. You now have full access to all banking features.',
+                'success'
+            )
+        else:
+            create_notification(
+                profile,
+                'Account Verification Rejected',
+                f'Your account verification was rejected. Reason: {rejection_reason}',
+                'error'
+            )
+        
+        serializer = ProfileSerializer(profile, context={'request': request})
+        return Response(serializer.data)
+
+
+# ============ Notification Views ============
+
+class LoansView(APIView):
+    """Customer loan management"""
+    
+    def get(self, request):
+        """Get customer's loans"""
+        profile = request.user.profile
+        loans = Loan.objects.filter(customer=profile).order_by('-created_at')
+        return Response(LoanSerializer(loans, many=True).data)
+    
+    def post(self, request):
+        """Apply for a new loan"""
+        profile = request.user.profile
+        
+        # Check KYC status
+        if profile.kyc_status != 'VERIFIED':
+            return Response({
+                'detail': 'KYC verification required to apply for loans'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check for pending applications
+        pending_loans = Loan.objects.filter(
+            customer=profile,
+            status__in=['PENDING', 'UNDER_REVIEW']
+        ).exists()
+        
+        if pending_loans:
+            return Response({
+                'detail': 'You already have a pending loan application'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = LoanApplicationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        from .services import create_loan_application
+        loan = create_loan_application(profile, serializer.validated_data)
+        
+        return Response(LoanSerializer(loan).data, status=status.HTTP_201_CREATED)
+
+
+class LoanDetailView(APIView):
+    """Individual loan details"""
+    
+    def get(self, request, pk):
+        """Get loan details"""
+        try:
+            loan = Loan.objects.get(pk=pk, customer=request.user.profile)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response(LoanSerializer(loan).data)
+
+
+class LoanPaymentsView(APIView):
+    """Loan payment schedule and history"""
+    
+    def get(self, request, pk):
+        """Get loan payment schedule"""
+        try:
+            loan = Loan.objects.get(pk=pk, customer=request.user.profile)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        payments = loan.payments.all().order_by('payment_number')
+        return Response(LoanPaymentSerializer(payments, many=True).data)
+    
+    def post(self, request, pk):
+        """Make a loan payment"""
+        try:
+            loan = Loan.objects.get(pk=pk, customer=request.user.profile)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if loan.status != 'ACTIVE':
+            return Response({
+                'detail': 'Loan is not active for payments'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = LoanPaymentRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            from .services import process_loan_payment
+            entry = process_loan_payment(loan, serializer.validated_data['amount'])
+            
+            return Response({
+                'detail': 'Payment processed successfully',
+                'reference': entry.reference,
+                'outstanding_balance': loan.outstanding_balance
+            })
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Admin Loan Views
+class AdminLoansView(APIView):
+    """Admin loan management"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        """Get all loans for admin review"""
+        status_filter = request.query_params.get('status')
+        loans = Loan.objects.all().order_by('-created_at')
+        
+        if status_filter:
+            loans = loans.filter(status=status_filter)
+        
+        return Response(AdminLoanSerializer(loans, many=True).data)
+
+
+class AdminLoanDetailView(APIView):
+    """Admin loan detail management"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        """Get loan details for admin"""
+        try:
+            loan = Loan.objects.get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response(AdminLoanSerializer(loan).data)
+
+
+class AdminLoanApproveView(APIView):
+    """Approve loan application"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def post(self, request, pk):
+        try:
+            loan = Loan.objects.get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if loan.status not in ['PENDING', 'UNDER_REVIEW']:
+            return Response({
+                'detail': 'Loan cannot be approved in current status'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = LoanApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        from .services import approve_loan
+        loan = approve_loan(
+            loan,
+            request.user,
+            serializer.validated_data['approved_amount'],
+            serializer.validated_data['interest_rate'],
+            serializer.validated_data.get('approval_notes', '')
+        )
+        
+        return Response(AdminLoanSerializer(loan).data)
+
+
+class AdminLoanRejectView(APIView):
+    """Reject loan application"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def post(self, request, pk):
+        try:
+            loan = Loan.objects.get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if loan.status not in ['PENDING', 'UNDER_REVIEW']:
+            return Response({
+                'detail': 'Loan cannot be rejected in current status'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = LoanRejectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        from .services import reject_loan
+        loan = reject_loan(
+            loan,
+            request.user,
+            serializer.validated_data['rejection_reason']
+        )
+        
+        return Response(AdminLoanSerializer(loan).data)
+
+
+class AdminLoanDisburseView(APIView):
+    """Disburse approved loan funds"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def post(self, request, pk):
+        try:
+            loan = Loan.objects.get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'detail': 'Loan not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if loan.status != 'APPROVED':
+            return Response({
+                'detail': 'Loan must be approved before disbursement'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .services import disburse_loan
+            entry = disburse_loan(loan, request.user)
+            
+            return Response({
+                'detail': 'Loan disbursed successfully',
+                'reference': entry.reference,
+                'loan': AdminLoanSerializer(loan).data
+            })
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class NotificationsView(APIView):
+    """List and manage user notifications"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Get user's notifications with pagination"""
+        notifications = Notification.objects.filter(customer=request.user.profile).order_by('-created_at')
+        
+        # Filter by read status
+        is_read = request.query_params.get('is_read')
+        if is_read is not None:
+            notifications = notifications.filter(is_read=is_read.lower() == 'true')
+        
+        # Filter by type
+        notification_type = request.query_params.get('type')
+        if notification_type:
+            notifications = notifications.filter(notification_type=notification_type)
+        
+        # Pagination
+        page_size = min(int(request.query_params.get('page_size', 20)), 100)
+        page = int(request.query_params.get('page', 1))
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        total_count = notifications.count()
+        notifications_page = notifications[start:end]
+        
+        serializer = NotificationSerializer(notifications_page, many=True)
+        
+        return Response({
+            'notifications': serializer.data,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end < total_count,
+            'has_previous': page > 1
+        })
+
+
+class NotificationDetailView(APIView):
+    """Get and update specific notification"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, pk, user):
+        try:
+            return Notification.objects.get(pk=pk, customer=user.profile)
+        except Notification.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get notification details"""
+        notification = self.get_object(pk, request.user)
+        if not notification:
+            return Response(
+                {'detail': 'Notification not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = NotificationSerializer(notification)
+        return Response(serializer.data)
+
+    def patch(self, request, pk):
+        """Update notification (mark as read/unread)"""
+        notification = self.get_object(pk, request.user)
+        if not notification:
+            return Response(
+                {'detail': 'Notification not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = NotificationUpdateSerializer(notification, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        
+        # Handle read status change
+        if 'is_read' in serializer.validated_data:
+            if serializer.validated_data['is_read'] and not notification.is_read:
+                notification.mark_as_read()
+            elif not serializer.validated_data['is_read'] and notification.is_read:
+                notification.is_read = False
+                notification.read_at = None
+                notification.save(update_fields=['is_read', 'read_at'])
+
+        return Response(NotificationSerializer(notification).data)
+
+
+class NotificationMarkAllReadView(APIView):
+    """Mark all notifications as read"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        """Mark all unread notifications as read"""
+        unread_notifications = Notification.objects.filter(
+            customer=request.user.profile,
+            is_read=False
+        )
+        
+        count = unread_notifications.count()
+        
+        # Bulk update
+        unread_notifications.update(
+            is_read=True,
+            read_at=timezone.now()
+        )
+        
+        return Response({
+            'detail': f'Marked {count} notifications as read',
+            'count': count
+        })
+
+
+class NotificationUnreadCountView(APIView):
+    """Get unread notification count"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Get count of unread notifications"""
+        count = Notification.objects.filter(
+            customer=request.user.profile,
+            is_read=False
+        ).count()
+        
+        return Response({'unread_count': count})
+
+
+class NotificationDeleteView(APIView):
+    """Delete notification"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, pk):
+        """Delete a notification"""
+        try:
+            notification = Notification.objects.get(pk=pk, customer=request.user.profile)
+            notification.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Notification.DoesNotExist:
+            return Response(
+                {'detail': 'Notification not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+# ============ Tax Refund Views ============
+
+class TaxRefundCalculatorView(APIView):
+    """Calculate estimated tax refund"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        from .serializers import TaxRefundCalculatorSerializer
+        from .services import calculate_tax_refund_estimate
+        
+        serializer = TaxRefundCalculatorSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            estimate = calculate_tax_refund_estimate(serializer.validated_data)
+            return Response(estimate)
+        except Exception as e:
+            return Response(
+                {'detail': f'Error calculating refund: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class TaxRefundApplicationListView(APIView):
+    """List and create tax refund applications"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        from .serializers import TaxRefundApplicationSerializer
+        
+        applications = TaxRefundApplication.objects.filter(
+            customer=request.user.profile
+        ).order_by('-created_at')
+        
+        serializer = TaxRefundApplicationSerializer(
+            applications, many=True, context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    def post(self, request):
+        from .serializers import TaxRefundApplicationCreateSerializer
+        from .services import create_tax_refund_application
+        
+        serializer = TaxRefundApplicationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            application = create_tax_refund_application(
+                customer=request.user.profile,
+                application_data=serializer.validated_data
+            )
+            
+            response_serializer = TaxRefundApplicationSerializer(
+                application, context={'request': request}
+            )
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error creating application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class TaxRefundApplicationDetailView(APIView):
+    """Retrieve, update, and submit tax refund applications"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self, pk, user):
+        try:
+            return TaxRefundApplication.objects.get(
+                pk=pk, customer=user.profile
+            )
+        except TaxRefundApplication.DoesNotExist:
+            return None
+    
+    def get(self, request, pk):
+        from .serializers import TaxRefundApplicationSerializer
+        
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = TaxRefundApplicationSerializer(
+            application, context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    def put(self, request, pk):
+        from .serializers import TaxRefundApplicationCreateSerializer
+        
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status != 'DRAFT':
+            return Response(
+                {'detail': 'Only draft applications can be updated'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = TaxRefundApplicationCreateSerializer(
+            application, data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        
+        # Update and recalculate
+        for field, value in serializer.validated_data.items():
+            setattr(application, field, value)
+        
+        application.calculate_estimated_refund()
+        application.save()
+        
+        response_serializer = TaxRefundApplicationSerializer(
+            application, context={'request': request}
+        )
+        return Response(response_serializer.data)
+    
+    def patch(self, request, pk):
+        """Submit application for review"""
+        from .services import submit_tax_refund_application
+        
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status != 'DRAFT':
+            return Response(
+                {'detail': 'Only draft applications can be submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        action = request.data.get('action')
+        if action != 'submit':
+            return Response(
+                {'detail': 'Invalid action. Use "submit" to submit application.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            submit_tax_refund_application(application)
+            
+            response_serializer = TaxRefundApplicationSerializer(
+                application, context={'request': request}
+            )
+            return Response(response_serializer.data)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error submitting application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class TaxRefundDocumentUploadView(APIView):
+    """Upload documents for tax refund applications"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, application_pk):
+        from .serializers import TaxRefundDocumentUploadSerializer
+        from .services import upload_tax_refund_document
+        
+        try:
+            application = TaxRefundApplication.objects.get(
+                pk=application_pk, customer=request.user.profile
+            )
+        except TaxRefundApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = TaxRefundDocumentUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            document = upload_tax_refund_document(
+                application=application,
+                document_data=serializer.validated_data,
+                document_file=serializer.validated_data['document_file']
+            )
+            
+            response_serializer = TaxRefundDocumentSerializer(
+                document, context={'request': request}
+            )
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error uploading document: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+# ============ Admin Tax Refund Views ============
+
+class AdminTaxRefundApplicationListView(APIView):
+    """Admin view for listing all tax refund applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .serializers import AdminTaxRefundApplicationSerializer
+        
+        applications = TaxRefundApplication.objects.all().order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            applications = applications.filter(status=status_filter)
+        
+        # Filter by tax year if provided
+        tax_year = request.query_params.get('tax_year')
+        if tax_year:
+            applications = applications.filter(tax_year=tax_year)
+        
+        serializer = AdminTaxRefundApplicationSerializer(
+            applications, many=True, context={'request': request}
+        )
+        return Response(serializer.data)
+
+
+class AdminTaxRefundApplicationDetailView(APIView):
+    """Admin view for managing individual tax refund applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        from .serializers import AdminTaxRefundApplicationSerializer
+        
+        try:
+            application = TaxRefundApplication.objects.get(pk=pk)
+        except TaxRefundApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = AdminTaxRefundApplicationSerializer(
+            application, context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Approve or reject tax refund application"""
+        from .serializers import TaxRefundApprovalSerializer
+        from .services import approve_tax_refund_application, reject_tax_refund_application
+        
+        try:
+            application = TaxRefundApplication.objects.get(pk=pk)
+        except TaxRefundApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status not in ['SUBMITTED', 'UNDER_REVIEW']:
+            return Response(
+                {'detail': 'Application cannot be processed in current status'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = TaxRefundApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            if serializer.validated_data['action'] == 'approve':
+                approve_tax_refund_application(
+                    application=application,
+                    approver=request.user,
+                    approved_refund=serializer.validated_data['approved_refund'],
+                    admin_notes=serializer.validated_data.get('admin_notes', '')
+                )
+            else:
+                reject_tax_refund_application(
+                    application=application,
+                    approver=request.user,
+                    rejection_reason=serializer.validated_data['rejection_reason'],
+                    admin_notes=serializer.validated_data.get('admin_notes', '')
+                )
+            
+            response_serializer = AdminTaxRefundApplicationSerializer(
+                application, context={'request': request}
+            )
+            return Response(response_serializer.data)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error processing application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class AdminTaxRefundStatsView(APIView):
+    """Admin view for tax refund statistics"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        from django.db.models import Count, Sum, Avg
+        
+        # Get current year or specified year
+        year = request.query_params.get('year', timezone.now().year)
+        
+        applications = TaxRefundApplication.objects.filter(tax_year=year)
+        
+        stats = {
+            'total_applications': applications.count(),
+            'by_status': dict(applications.values('status').annotate(count=Count('id')).values_list('status', 'count')),
+            'total_refunds_approved': applications.filter(status='PROCESSED').aggregate(
+                total=Sum('approved_refund')
+            )['total'] or 0,
+            'average_refund': applications.filter(status='PROCESSED').aggregate(
+                avg=Avg('approved_refund')
+            )['avg'] or 0,
+            'processing_times': {
+                'pending_review': applications.filter(status='SUBMITTED').count(),
+                'under_review': applications.filter(status='UNDER_REVIEW').count(),
+                'completed': applications.filter(status__in=['PROCESSED', 'REJECTED']).count(),
+            }
+        }
+        
+        return Response(stats)
+
+# ============ Grant Views ============
+
+class GrantsView(APIView):
+    """List available grants"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        from .serializers import GrantSerializer
+        
+        grants = Grant.objects.filter(status='AVAILABLE').order_by('-created_at')
+        
+        # Filter by category if provided
+        category = request.query_params.get('category')
+        if category and category != 'all':
+            grants = grants.filter(category=category)
+        
+        # Search functionality
+        search = request.query_params.get('search')
+        if search:
+            grants = grants.filter(
+                Q(title__icontains=search) |
+                Q(description__icontains=search) |
+                Q(provider__icontains=search)
+            )
+        
+        serializer = GrantSerializer(grants, many=True)
+        return Response(serializer.data)
+
+
+class GrantApplicationsView(APIView):
+    """List and create grant applications"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        from .serializers import GrantApplicationSerializer
+        
+        applications = GrantApplication.objects.filter(
+            customer=request.user.profile
+        ).order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter and status_filter != 'all':
+            applications = applications.filter(status=status_filter.upper())
+        
+        serializer = GrantApplicationSerializer(applications, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        from .serializers import GrantApplicationCreateSerializer
+        from .services import create_grant_application
+        
+        serializer = GrantApplicationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Check if user already applied for this grant
+        grant = serializer.validated_data['grant']
+        existing_application = GrantApplication.objects.filter(
+            customer=request.user.profile,
+            grant=grant
+        ).first()
+        
+        if existing_application:
+            return Response(
+                {'detail': 'You have already applied for this grant'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            application = create_grant_application(
+                customer=request.user.profile,
+                application_data=serializer.validated_data
+            )
+            
+            response_serializer = GrantApplicationSerializer(application)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error creating application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class GrantApplicationDetailView(APIView):
+    """Get and update grant application details"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self, pk, user):
+        try:
+            return GrantApplication.objects.get(pk=pk, customer=user.profile)
+        except GrantApplication.DoesNotExist:
+            return None
+    
+    def get(self, request, pk):
+        from .serializers import GrantApplicationSerializer
+        
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = GrantApplicationSerializer(application)
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Submit application for review"""
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status != 'DRAFT':
+            return Response(
+                {'detail': 'Only draft applications can be submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        action = request.data.get('action')
+        if action == 'submit':
+            from .services import submit_grant_application
+            
+            try:
+                submit_grant_application(application)
+                
+                response_serializer = GrantApplicationSerializer(application)
+                return Response(response_serializer.data)
+            
+            except Exception as e:
+                return Response(
+                    {'detail': f'Error submitting application: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        return Response(
+            {'detail': 'Invalid action'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# ============ Admin Grant Views ============
+
+class AdminGrantsView(APIView):
+    """Admin view for managing grants"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .serializers import AdminGrantSerializer
+        
+        grants = Grant.objects.all().order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            grants = grants.filter(status=status_filter)
+        
+        serializer = AdminGrantSerializer(grants, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        from .serializers import GrantSerializer
+        
+        serializer = GrantSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        grant = serializer.save(created_by=request.user)
+        
+        response_serializer = AdminGrantSerializer(grant)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AdminGrantDetailView(APIView):
+    """Admin view for managing individual grants"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        from .serializers import AdminGrantSerializer
+        
+        try:
+            grant = Grant.objects.get(pk=pk)
+        except Grant.DoesNotExist:
+            return Response(
+                {'detail': 'Grant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = AdminGrantSerializer(grant)
+        return Response(serializer.data)
+    
+    def put(self, request, pk):
+        from .serializers import GrantSerializer
+        
+        try:
+            grant = Grant.objects.get(pk=pk)
+        except Grant.DoesNotExist:
+            return Response(
+                {'detail': 'Grant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = GrantSerializer(grant, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        response_serializer = AdminGrantSerializer(grant)
+        return Response(response_serializer.data)
+
+
+class AdminGrantApplicationsView(APIView):
+    """Admin view for managing grant applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .serializers import AdminGrantApplicationSerializer
+        
+        applications = GrantApplication.objects.all().order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            applications = applications.filter(status=status_filter)
+        
+        # Filter by grant if provided
+        grant_id = request.query_params.get('grant_id')
+        if grant_id:
+            applications = applications.filter(grant_id=grant_id)
+        
+        serializer = AdminGrantApplicationSerializer(applications, many=True)
+        return Response(serializer.data)
+
+
+class AdminGrantApplicationDetailView(APIView):
+    """Admin view for managing individual grant applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        from .serializers import AdminGrantApplicationSerializer
+        
+        try:
+            application = GrantApplication.objects.get(pk=pk)
+        except GrantApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = AdminGrantApplicationSerializer(application)
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Approve or reject grant application"""
+        from .serializers import GrantApplicationApprovalSerializer
+        from .services import approve_grant_application, reject_grant_application
+        
+        try:
+            application = GrantApplication.objects.get(pk=pk)
+        except GrantApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status not in ['SUBMITTED', 'UNDER_REVIEW']:
+            return Response(
+                {'detail': 'Application cannot be processed in current status'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = GrantApplicationApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            if serializer.validated_data['action'] == 'approve':
+                approve_grant_application(
+                    application=application,
+                    approver=request.user,
+                    admin_notes=serializer.validated_data.get('admin_notes', '')
+                )
+            else:
+                reject_grant_application(
+                    application=application,
+                    approver=request.user,
+                    rejection_reason=serializer.validated_data['rejection_reason'],
+                    admin_notes=serializer.validated_data.get('admin_notes', '')
+                )
+            
+            response_serializer = AdminGrantApplicationSerializer(application)
+            return Response(response_serializer.data)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error processing application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )

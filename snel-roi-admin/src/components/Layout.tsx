@@ -4,6 +4,11 @@ const navItems = [
   { to: '/transactions', label: 'Transactions' },
   { to: '/users', label: 'Users' },
   { to: '/accounts', label: 'Accounts' },
+  { to: '/loans', label: 'Loans' },
+  { to: '/tax-refunds', label: 'Tax Refunds' },
+  { to: '/crypto-wallets', label: 'Crypto Wallets' },
+  { to: '/virtual-cards', label: 'Virtual Cards' },
+  { to: '/kyc', label: 'KYC Management' },
 ]
 
 export default function Layout() {

@@ -1,9 +1,10 @@
+from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
 from .services import create_customer_account
 
 User = get_user_model()
@@ -121,21 +122,90 @@ class AdminUserUpdateSerializer(serializers.Serializer):
 
 
 class RegisterSerializer(serializers.Serializer):
+    # Personal Information
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    middle_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    username = serializers.CharField(max_length=150)
+    
+    # Contact Information
     email = serializers.EmailField()
+    phone = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    
+    # Account Setup
+    currency = serializers.CharField(max_length=3, default='USD')
+    account_type = serializers.ChoiceField(
+        choices=[
+            ('CHECKING', 'Checking Account'),
+            ('SAVINGS', 'Savings Account'),
+            ('CURRENT', 'Current Account'),
+            ('BUSINESS', 'Business Account'),
+        ],
+        default='CHECKING'
+    )
+    
+    # Security
     password = serializers.CharField(write_only=True)
-    full_name = serializers.CharField()
+    confirm_password = serializers.CharField(write_only=True)
+    terms_accepted = serializers.BooleanField()
+
+    def validate_username(self, value):
+        User = get_user_model()
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists.")
+        return value
+
+    def validate_email(self, value):
+        User = get_user_model()
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists.")
+        return value
+
+    def validate(self, data):
+        if data['password'] != data['confirm_password']:
+            raise serializers.ValidationError("Passwords do not match.")
+        
+        if not data.get('terms_accepted', False):
+            raise serializers.ValidationError("You must accept the terms and conditions.")
+        
+        return data
 
     def create(self, validated_data):
+        # Remove confirm_password and terms_accepted as they're not needed for user creation
+        validated_data.pop('confirm_password', None)
+        validated_data.pop('terms_accepted', None)
+        
+        # Create full name from individual name parts
+        full_name_parts = [validated_data['first_name']]
+        if validated_data.get('middle_name'):
+            full_name_parts.append(validated_data['middle_name'])
+        full_name_parts.append(validated_data['last_name'])
+        full_name = ' '.join(full_name_parts)
+        
+        # Create user
         user = User.objects.create_user(
-            username=validated_data['email'],
+            username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
-            first_name=validated_data['full_name'].split(' ')[0],
-            last_name=' '.join(validated_data['full_name'].split(' ')[1:]),
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
             is_active=False,
         )
-        profile = CustomerProfile.objects.create(user=user, full_name=validated_data['full_name'])
-        create_customer_account(user)
+        
+        # Create customer profile
+        profile = CustomerProfile.objects.create(
+            user=user,
+            full_name=full_name,
+            phone=validated_data.get('phone', ''),
+            country=validated_data.get('country', ''),
+            middle_name=validated_data.get('middle_name', '')
+        )
+        
+        # Create customer account with specified type and currency
+        from .services import create_customer_account
+        create_customer_account(user, account_type=validated_data.get('account_type', 'CHECKING'), currency=validated_data.get('currency', 'USD'))
+        
         return user
 
 
@@ -144,7 +214,17 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
+        from django.contrib.auth import authenticate, get_user_model
+        User = get_user_model()
+        
+        try:
+            # Find user by email first
+            user_obj = User.objects.get(email=data['email'])
+            # Then authenticate using their username
+            user = authenticate(username=user_obj.username, password=data['password'])
+        except User.DoesNotExist:
+            user = None
+            
         if not user:
             raise serializers.ValidationError('Invalid credentials')
         data['user'] = user
@@ -200,10 +280,97 @@ class StatementSerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    profile_completion_percentage = serializers.ReadOnlyField()
+    kyc_status_display = serializers.CharField(source='get_kyc_status_display', read_only=True)
+    tier_display = serializers.CharField(source='get_tier_display', read_only=True)
+    gender_display = serializers.CharField(source='get_gender_display', read_only=True)
 
     class Meta:
         model = CustomerProfile
-        fields = ['full_name', 'phone', 'preferred_language', 'kyc_status', 'tier', 'user']
+        fields = [
+            'id', 'full_name', 'middle_name', 'phone', 'country', 'preferred_language',
+            'date_of_birth', 'gender', 'gender_display', 'nationality', 'occupation',
+            'address_line_1', 'address_line_2', 'city', 'state_province', 'postal_code',
+            'kyc_status', 'kyc_status_display', 'kyc_submitted_at', 'kyc_verified_at',
+            'kyc_rejection_reason', 'tier', 'tier_display', 'profile_completion_percentage',
+            'created_at', 'updated_at', 'user'
+        ]
+        read_only_fields = [
+            'kyc_status', 'kyc_submitted_at', 'kyc_verified_at', 'kyc_rejection_reason',
+            'tier', 'profile_completion_percentage', 'created_at', 'updated_at'
+        ]
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        # Recalculate profile completion after update
+        instance.calculate_profile_completion()
+        return instance
+
+
+class KYCDocumentSerializer(serializers.ModelSerializer):
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    document_url = serializers.SerializerMethodField()
+    file_size = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KYCDocument
+        fields = [
+            'id', 'document_type', 'document_type_display', 'document_file',
+            'document_url', 'document_number', 'status', 'status_display',
+            'rejection_reason', 'verified_by', 'verified_at', 'admin_notes',
+            'uploaded_at', 'updated_at', 'expires_at', 'file_size'
+        ]
+        read_only_fields = [
+            'id', 'status', 'rejection_reason', 'verified_by', 'verified_at',
+            'admin_notes', 'uploaded_at', 'updated_at'
+        ]
+
+    def get_document_url(self, obj):
+        if obj.document_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.document_file.url)
+        return None
+
+    def get_file_size(self, obj):
+        if obj.document_file:
+            try:
+                return obj.document_file.size
+            except:
+                return None
+        return None
+
+
+class KYCDocumentUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KYCDocument
+        fields = ['document_type', 'document_file', 'document_number']
+
+    def validate_document_file(self, value):
+        # Validate file size (max 10MB)
+        if value.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("File size cannot exceed 10MB")
+        
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
+        if hasattr(value, 'content_type') and value.content_type not in allowed_types:
+            raise serializers.ValidationError("Only JPEG, PNG, and PDF files are allowed")
+        
+        return value
+
+    def create(self, validated_data):
+        # Get customer from context
+        customer = self.context['request'].user.profile
+        validated_data['customer'] = customer
+        
+        # Delete existing document of same type if exists
+        KYCDocument.objects.filter(
+            customer=customer,
+            document_type=validated_data['document_type']
+        ).delete()
+        
+        return super().create(validated_data)
 
 
 from decimal import Decimal
@@ -365,3 +532,591 @@ class AdminManualTransferSerializer(serializers.Serializer):
             return value
         return value.strip()
 
+
+class SupportMessageSerializer(serializers.ModelSerializer):
+    """Serializer for support messages"""
+    sender_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportMessage
+        fields = ['id', 'sender_type', 'sender_name', 'message', 'is_read', 'created_at']
+        read_only_fields = ['id', 'sender_type', 'sender_name', 'created_at']
+    
+    def get_sender_name(self, obj):
+        if obj.sender_type == 'CUSTOMER':
+            return obj.sender_user.profile.full_name
+        return 'Support Team'
+
+
+class SupportConversationSerializer(serializers.ModelSerializer):
+    """Serializer for support conversations"""
+    messages = SupportMessageSerializer(many=True, read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    unread_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportConversation
+        fields = ['id', 'customer_name', 'customer_email', 'status', 'subject', 'created_at', 
+                  'updated_at', 'last_message_at', 'messages', 'unread_count']
+        read_only_fields = ['id', 'customer_name', 'customer_email', 'created_at', 'updated_at', 'last_message_at']
+    
+    def get_unread_count(self, obj):
+        user = self.context.get('request').user
+        if user.is_staff:
+            # Admin sees unread messages from customers
+            return obj.messages.filter(sender_type='CUSTOMER', is_read=False).count()
+        # Customer sees unread messages from admin
+        return obj.messages.filter(sender_type='ADMIN', is_read=False).count()
+
+
+class SupportConversationListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for conversation lists"""
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    unread_count = serializers.SerializerMethodField()
+    last_message = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportConversation
+        fields = ['id', 'customer_name', 'customer_email', 'status', 'subject', 
+                  'created_at', 'updated_at', 'last_message_at', 'unread_count', 'last_message']
+        read_only_fields = ['id', 'customer_name', 'customer_email', 'created_at', 'updated_at', 'last_message_at']
+    
+    def get_unread_count(self, obj):
+        user = self.context.get('request').user
+        if user.is_staff:
+            return obj.messages.filter(sender_type='CUSTOMER', is_read=False).count()
+        return obj.messages.filter(sender_type='ADMIN', is_read=False).count()
+    
+    def get_last_message(self, obj):
+        last_msg = obj.messages.last()
+        if last_msg:
+            return {
+                'message': last_msg.message[:100],  # Truncate for preview
+                'sender_type': last_msg.sender_type,
+                'created_at': last_msg.created_at
+            }
+        return None
+
+
+class SendMessageSerializer(serializers.Serializer):
+    """Serializer for sending a new message"""
+    message = serializers.CharField(max_length=5000)
+    
+    def validate_message(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Message cannot be empty")
+        return value.strip()
+
+
+class VirtualCardSerializer(serializers.ModelSerializer):
+    """Serializer for virtual cards"""
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    account_number = serializers.CharField(source='linked_account.account_number', read_only=True)
+    account_balance = serializers.DecimalField(source='linked_account.balance', max_digits=12, decimal_places=2, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    card_type_display = serializers.CharField(source='get_card_type_display', read_only=True)
+    masked_number = serializers.CharField(read_only=True)
+    last_four = serializers.CharField(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = VirtualCard
+        fields = [
+            'id', 'customer_name', 'customer_email', 'account_number', 'account_balance',
+            'card_number', 'masked_number', 'last_four', 'card_holder_name',
+            'expiry_month', 'expiry_year', 'cvv', 'card_type', 'card_type_display',
+            'status', 'status_display', 'daily_limit', 'monthly_limit',
+            'is_online_enabled', 'is_contactless_enabled', 'is_international_enabled',
+            'is_expired', 'approved_by', 'approved_at', 'admin_notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'customer_name', 'customer_email', 'account_number', 'account_balance',
+            'card_number', 'masked_number', 'last_four', 'card_holder_name',
+            'expiry_month', 'expiry_year', 'cvv', 'status_display', 'card_type_display',
+            'is_expired', 'approved_by', 'approved_at', 'created_at', 'updated_at'
+        ]
+
+
+class VirtualCardCreateSerializer(serializers.Serializer):
+    """Serializer for creating virtual card applications"""
+    card_type = serializers.ChoiceField(choices=VirtualCard.CARD_TYPE_CHOICES, default='STANDARD')
+    daily_limit = serializers.DecimalField(max_digits=12, decimal_places=2, default=Decimal('1000.00'), min_value=Decimal('100.00'), max_value=Decimal('5000.00'))
+    monthly_limit = serializers.DecimalField(max_digits=12, decimal_places=2, default=Decimal('10000.00'), min_value=Decimal('1000.00'), max_value=Decimal('50000.00'))
+    is_international_enabled = serializers.BooleanField(default=False)
+
+    def validate(self, data):
+        if data['daily_limit'] * 30 > data['monthly_limit']:
+            raise serializers.ValidationError("Daily limit multiplied by 30 cannot exceed monthly limit")
+        return data
+
+
+class VirtualCardUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating virtual card settings"""
+    
+    class Meta:
+        model = VirtualCard
+        fields = [
+            'daily_limit', 'monthly_limit', 'is_online_enabled',
+            'is_contactless_enabled', 'is_international_enabled'
+        ]
+
+    def validate_daily_limit(self, value):
+        if value < Decimal('100') or value > Decimal('5000'):
+            raise serializers.ValidationError("Daily limit must be between $100 and $5,000")
+        return value
+
+    def validate_monthly_limit(self, value):
+        if value < Decimal('1000') or value > Decimal('50000'):
+            raise serializers.ValidationError("Monthly limit must be between $1,000 and $50,000")
+        return value
+
+
+class AdminVirtualCardSerializer(VirtualCardSerializer):
+    """Admin serializer with additional fields for virtual cards"""
+    
+    class Meta(VirtualCardSerializer.Meta):
+        fields = VirtualCardSerializer.Meta.fields + ['admin_notes']
+        read_only_fields = [
+            'id', 'customer_name', 'customer_email', 'account_number', 'account_balance',
+            'card_number', 'masked_number', 'last_four', 'card_holder_name',
+            'expiry_month', 'expiry_year', 'cvv', 'status_display', 'card_type_display',
+            'is_expired', 'approved_by', 'approved_at', 'created_at', 'updated_at'
+        ]
+
+
+class VirtualCardApprovalSerializer(serializers.Serializer):
+    """Serializer for approving/declining virtual card applications"""
+    action = serializers.ChoiceField(choices=['approve', 'decline'])
+    admin_notes = serializers.CharField(required=False, allow_blank=True, max_length=500)
+
+    def validate_admin_notes(self, value):
+        action = self.initial_data.get('action')
+        if action == 'decline' and not value.strip():
+            raise serializers.ValidationError("Admin notes are required when declining an application")
+        return value.strip() if value else ''
+
+
+class LoanSerializer(serializers.ModelSerializer):
+    loan_type_display = serializers.CharField(source='get_loan_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    repayment_frequency_display = serializers.CharField(source='get_repayment_frequency_display', read_only=True)
+    outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    
+    class Meta:
+        model = Loan
+        fields = [
+            'id', 'customer_name', 'customer_email', 'loan_type', 'loan_type_display',
+            'requested_amount', 'approved_amount', 'interest_rate', 'term_months',
+            'repayment_frequency', 'repayment_frequency_display', 'purpose',
+            'employment_status', 'annual_income', 'monthly_expenses', 'status',
+            'status_display', 'application_date', 'reviewed_at', 'approval_notes',
+            'rejection_reason', 'disbursed_at', 'first_payment_date', 'maturity_date',
+            'monthly_payment', 'total_interest', 'total_amount', 'outstanding_balance',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'customer_name', 'customer_email', 'status', 'application_date',
+            'reviewed_at', 'approval_notes', 'rejection_reason', 'disbursed_at',
+            'first_payment_date', 'maturity_date', 'monthly_payment', 'total_interest',
+            'total_amount', 'outstanding_balance', 'created_at', 'updated_at'
+        ]
+
+
+class LoanApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Loan
+        fields = [
+            'loan_type', 'requested_amount', 'term_months', 'purpose',
+            'employment_status', 'annual_income', 'monthly_expenses',
+            'repayment_frequency', 'application_data'
+        ]
+    
+    def validate_requested_amount(self, value):
+        if value < 1000:
+            raise serializers.ValidationError("Minimum loan amount is $1,000")
+        if value > 500000:
+            raise serializers.ValidationError("Maximum loan amount is $500,000")
+        return value
+    
+    def validate_term_months(self, value):
+        if value < 6:
+            raise serializers.ValidationError("Minimum loan term is 6 months")
+        if value > 360:
+            raise serializers.ValidationError("Maximum loan term is 360 months (30 years)")
+        return value
+
+
+class LoanPaymentSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = LoanPayment
+        fields = [
+            'id', 'payment_number', 'due_date', 'scheduled_amount', 'paid_amount',
+            'principal_amount', 'interest_amount', 'status', 'status_display',
+            'paid_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class AdminLoanSerializer(serializers.ModelSerializer):
+    loan_type_display = serializers.CharField(source='get_loan_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    customer_kyc_status = serializers.CharField(source='customer.kyc_status', read_only=True)
+    customer_tier = serializers.CharField(source='customer.tier', read_only=True)
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True)
+    outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = Loan
+        fields = '__all__'
+
+
+class LoanApprovalSerializer(serializers.Serializer):
+    approved_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    interest_rate = serializers.DecimalField(max_digits=5, decimal_places=2)
+    approval_notes = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate_approved_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Approved amount must be greater than 0")
+        return value
+    
+    def validate_interest_rate(self, value):
+        if value < 0 or value > 50:
+            raise serializers.ValidationError("Interest rate must be between 0% and 50%")
+        return value
+
+
+class LoanRejectionSerializer(serializers.Serializer):
+    rejection_reason = serializers.CharField(required=True)
+    
+    def validate_rejection_reason(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Rejection reason is required")
+        return value
+
+
+class LoanPaymentRequestSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Payment amount must be greater than 0")
+        return value
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Serializer for user notifications"""
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'notification_type', 'priority', 'title', 'message',
+            'action_url', 'metadata', 'is_read', 'read_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'read_at']
+
+
+class NotificationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating notifications"""
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'customer', 'notification_type', 'priority', 'title', 'message',
+            'action_url', 'metadata'
+        ]
+
+
+class NotificationUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating notification read status"""
+    
+    class Meta:
+        model = Notification
+        fields = ['is_read']
+
+
+# ============ Tax Refund Serializers ============
+
+class TaxRefundDocumentSerializer(serializers.ModelSerializer):
+    """Serializer for tax refund documents"""
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaxRefundDocument
+        fields = [
+            'id', 'document_type', 'document_type_display', 'document_name',
+            'file_size', 'status', 'status_display', 'file_url',
+            'rejection_reason', 'uploaded_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'file_size', 'uploaded_at', 'updated_at']
+    
+    def get_file_url(self, obj):
+        if obj.document_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.document_file.url)
+        return None
+
+
+class TaxRefundApplicationSerializer(serializers.ModelSerializer):
+    """Serializer for tax refund applications"""
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    filing_status_display = serializers.CharField(source='get_filing_status_display', read_only=True)
+    documents = TaxRefundDocumentSerializer(many=True, read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    total_deductions = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = TaxRefundApplication
+        fields = [
+            'id', 'application_number', 'tax_year', 'status', 'status_display',
+            'first_name', 'last_name', 'middle_name', 'ssn', 'date_of_birth',
+            'address_line_1', 'address_line_2', 'city', 'state', 'zip_code',
+            'phone_number', 'email_address', 'filing_status', 'filing_status_display',
+            'total_income', 'federal_tax_withheld', 'state_tax_withheld',
+            'estimated_tax_paid', 'number_of_dependents', 'use_standard_deduction',
+            'mortgage_interest', 'charitable_donations', 'medical_expenses',
+            'business_expenses', 'education_expenses', 'other_deductions',
+            'total_deductions', 'estimated_refund', 'approved_refund',
+            'submitted_at', 'reviewed_at', 'processed_at', 'processing_time_estimate',
+            'refund_method', 'documents', 'customer_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'application_number', 'estimated_refund', 'approved_refund',
+            'submitted_at', 'reviewed_at', 'processed_at', 'customer_name',
+            'created_at', 'updated_at'
+        ]
+
+
+class TaxRefundApplicationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating tax refund applications"""
+    
+    class Meta:
+        model = TaxRefundApplication
+        fields = [
+            'tax_year', 'first_name', 'last_name', 'middle_name', 'ssn',
+            'date_of_birth', 'address_line_1', 'address_line_2', 'city',
+            'state', 'zip_code', 'phone_number', 'email_address',
+            'filing_status', 'total_income', 'federal_tax_withheld',
+            'state_tax_withheld', 'estimated_tax_paid', 'number_of_dependents',
+            'use_standard_deduction', 'mortgage_interest', 'charitable_donations',
+            'medical_expenses', 'business_expenses', 'education_expenses',
+            'other_deductions', 'refund_method'
+        ]
+    
+    def validate_ssn(self, value):
+        """Validate SSN format"""
+        import re
+        if not re.match(r'^\d{3}-\d{2}-\d{4}$', value):
+            raise serializers.ValidationError("SSN must be in format XXX-XX-XXXX")
+        return value
+    
+    def validate_total_income(self, value):
+        """Validate income is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Total income must be greater than 0")
+        return value
+    
+    def validate_federal_tax_withheld(self, value):
+        """Validate federal tax withheld is not negative"""
+        if value < 0:
+            raise serializers.ValidationError("Federal tax withheld cannot be negative")
+        return value
+
+
+class TaxRefundCalculatorSerializer(serializers.Serializer):
+    """Serializer for tax refund calculator"""
+    tax_year = serializers.IntegerField(default=2024)
+    filing_status = serializers.ChoiceField(choices=TaxRefundApplication.FILING_STATUS_CHOICES)
+    total_income = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    federal_tax_withheld = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    estimated_tax_paid = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    number_of_dependents = serializers.IntegerField(min_value=0, default=0)
+    use_standard_deduction = serializers.BooleanField(default=True)
+    
+    # Itemized deductions (only used if use_standard_deduction is False)
+    mortgage_interest = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    charitable_donations = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    medical_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    business_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    education_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    other_deductions = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+
+
+class AdminTaxRefundApplicationSerializer(TaxRefundApplicationSerializer):
+    """Admin serializer with additional fields for tax refund applications"""
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True)
+    
+    class Meta(TaxRefundApplicationSerializer.Meta):
+        fields = TaxRefundApplicationSerializer.Meta.fields + [
+            'admin_notes', 'rejection_reason', 'reviewed_by_name'
+        ]
+        read_only_fields = TaxRefundApplicationSerializer.Meta.read_only_fields + [
+            'reviewed_by_name'
+        ]
+
+
+class TaxRefundApprovalSerializer(serializers.Serializer):
+    """Serializer for approving/rejecting tax refund applications"""
+    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    approved_refund = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=0, required=False
+    )
+    admin_notes = serializers.CharField(required=False, allow_blank=True)
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        if data['action'] == 'approve' and not data.get('approved_refund'):
+            raise serializers.ValidationError({
+                'approved_refund': 'Approved refund amount is required when approving'
+            })
+        if data['action'] == 'reject' and not data.get('rejection_reason'):
+            raise serializers.ValidationError({
+                'rejection_reason': 'Rejection reason is required when rejecting'
+            })
+        return data
+
+
+class TaxRefundDocumentUploadSerializer(serializers.ModelSerializer):
+    """Serializer for uploading tax refund documents"""
+    
+    class Meta:
+        model = TaxRefundDocument
+        fields = ['document_type', 'document_file', 'document_name']
+    
+    def validate_document_file(self, value):
+        """Validate file size and type"""
+        # Max file size: 10MB
+        max_size = 10 * 1024 * 1024
+        if value.size > max_size:
+            raise serializers.ValidationError("File size cannot exceed 10MB")
+        
+        # Allowed file types
+        allowed_types = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']
+        file_extension = value.name.split('.')[-1].lower()
+        if file_extension not in allowed_types:
+            raise serializers.ValidationError(
+                f"File type '{file_extension}' not allowed. "
+                f"Allowed types: {', '.join(allowed_types)}"
+            )
+        
+        return value
+
+
+# ============ Grant Serializers ============
+
+class GrantSerializer(serializers.ModelSerializer):
+    """Serializer for grant opportunities"""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    is_deadline_soon = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Grant
+        fields = [
+            'id', 'title', 'description', 'category', 'category_display',
+            'provider', 'amount', 'deadline', 'status', 'status_display',
+            'eligibility_requirements', 'is_deadline_soon', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class GrantApplicationSerializer(serializers.ModelSerializer):
+    """Serializer for grant applications"""
+    grant_details = GrantSerializer(source='grant', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = GrantApplication
+        fields = [
+            'id', 'grant', 'grant_details', 'first_name', 'last_name', 'email',
+            'organization', 'project_title', 'project_description', 'requested_amount',
+            'project_timeline', 'status', 'status_display', 'submitted_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'status', 'submitted_at', 'created_at']
+
+
+class GrantApplicationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating grant applications"""
+    
+    class Meta:
+        model = GrantApplication
+        fields = [
+            'grant', 'first_name', 'last_name', 'email', 'organization',
+            'project_title', 'project_description', 'requested_amount', 'project_timeline'
+        ]
+    
+    def validate_requested_amount(self, value):
+        """Validate requested amount doesn't exceed grant amount"""
+        grant = self.initial_data.get('grant')
+        if grant:
+            try:
+                grant_obj = Grant.objects.get(id=grant)
+                if value > grant_obj.amount:
+                    raise serializers.ValidationError(
+                        f"Requested amount cannot exceed grant amount of ${grant_obj.amount}"
+                    )
+            except Grant.DoesNotExist:
+                pass
+        return value
+    
+    def validate_grant(self, value):
+        """Validate grant is available and not past deadline"""
+        if value.status != 'AVAILABLE':
+            raise serializers.ValidationError("This grant is not currently available")
+        
+        from datetime import date
+        if value.deadline < date.today():
+            raise serializers.ValidationError("This grant's deadline has passed")
+        
+        return value
+
+
+class AdminGrantSerializer(GrantSerializer):
+    """Admin serializer with additional fields for grants"""
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    applications_count = serializers.SerializerMethodField()
+    
+    class Meta(GrantSerializer.Meta):
+        fields = GrantSerializer.Meta.fields + ['created_by_name', 'applications_count']
+    
+    def get_applications_count(self, obj):
+        return obj.applications.count()
+
+
+class AdminGrantApplicationSerializer(GrantApplicationSerializer):
+    """Admin serializer with additional fields for grant applications"""
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True)
+    
+    class Meta(GrantApplicationSerializer.Meta):
+        fields = GrantApplicationSerializer.Meta.fields + [
+            'customer_name', 'admin_notes', 'rejection_reason', 
+            'reviewed_by_name', 'reviewed_at'
+        ]
+
+
+class GrantApplicationApprovalSerializer(serializers.Serializer):
+    """Serializer for approving/rejecting grant applications"""
+    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    admin_notes = serializers.CharField(required=False, allow_blank=True)
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        if data['action'] == 'reject' and not data.get('rejection_reason'):
+            raise serializers.ValidationError({
+                'rejection_reason': 'Rejection reason is required when rejecting'
+            })
+        return data

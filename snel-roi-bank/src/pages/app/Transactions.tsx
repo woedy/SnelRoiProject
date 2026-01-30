@@ -47,7 +47,7 @@ const Transactions = () => {
   const [unsettledCrypto, setUnsettledCrypto] = useState<PendingCryptoDeposit[]>([]);
 
   useEffect(() => {
-    apiRequest<TransactionsResponse>('/transactions').then((data) => {
+    apiRequest<TransactionsResponse>('/transactions/').then((data) => {
       setTransactions(data.transactions);
       setUnsettledCrypto(data.unsettled_crypto_deposits);
     });
