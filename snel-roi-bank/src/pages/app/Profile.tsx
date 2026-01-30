@@ -131,7 +131,7 @@ const Profile = () => {
   return (
     <div className="max-w-4xl mx-auto pb-20 lg:pb-0 space-y-6">
       <div className="mb-8">
-        <h1 className="text-2xl lg:text-3xl font-display font-bold text-foreground">
+        <h1 className="text-2xl lg:text-3xl font-display font-bold text-slate-900 dark:text-slate-100">
           Profile
         </h1>
         <p className="text-muted-foreground mt-1">Manage your personal information</p>
@@ -139,15 +139,15 @@ const Profile = () => {
 
       {/* Profile Header Card */}
       <Card>
-        <div className="h-24 gradient-primary" />
+        <div className="h-24 bg-gradient-to-r from-slate-100 to-slate-200 dark:gradient-primary" />
         <CardContent className="px-6 pb-6">
           <div className="flex flex-col sm:flex-row sm:items-end gap-4 -mt-12 mb-6">
             <div className="w-24 h-24 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground text-3xl font-bold border-4 border-card shadow-lg">
               {formData.full_name ? formData.full_name.slice(0, 2).toUpperCase() : 'SR'}
             </div>
             <div className="flex-1">
-              <h2 className="text-xl font-semibold text-foreground">{formData.full_name}</h2>
-              <p className="text-muted-foreground">{profile.user.email}</p>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{formData.full_name}</h2>
+              <p className="text-slate-600 dark:text-white/80">{profile.user.email}</p>
               <div className="flex flex-wrap gap-2 mt-2">
                 <Badge variant="secondary" className="gap-1">
                   <Star className="h-3 w-3" />
@@ -203,7 +203,7 @@ const Profile = () => {
         <TabsContent value="personal" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
+              <CardTitle className="text-slate-900 dark:text-slate-100">Personal Information</CardTitle>
               <CardDescription>Update your personal details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -312,7 +312,7 @@ const Profile = () => {
         <TabsContent value="address" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
                 <MapPin className="h-5 w-5" />
                 Address Information
               </CardTitle>

@@ -181,6 +181,9 @@ class LedgerEntry(models.Model):
         ('TRANSFER', 'Transfer'),
         ('WITHDRAWAL', 'Withdrawal'),
         ('EXTERNAL_TRANSFER', 'External Transfer'),
+        ('LOAN_DISBURSEMENT', 'Loan Disbursement'),
+        ('LOAN_PAYMENT', 'Loan Payment'),
+        ('TAX_REFUND', 'Tax Refund'),
     ]
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
@@ -297,6 +300,156 @@ class CryptoWallet(models.Model):
         return f"{self.get_crypto_type_display()} ({self.get_network_display()})"
 
 
+class Loan(models.Model):
+    """Customer loan applications and management"""
+    LOAN_TYPE_CHOICES = [
+        ('PERSONAL', 'Personal Loan'),
+        ('BUSINESS', 'Business Loan'),
+        ('MORTGAGE', 'Mortgage'),
+        ('AUTO', 'Auto Loan'),
+        ('EDUCATION', 'Education Loan'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('UNDER_REVIEW', 'Under Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('ACTIVE', 'Active'),
+        ('PAID_OFF', 'Paid Off'),
+        ('DEFAULTED', 'Defaulted'),
+    ]
+    
+    REPAYMENT_FREQUENCY_CHOICES = [
+        ('MONTHLY', 'Monthly'),
+        ('QUARTERLY', 'Quarterly'),
+        ('SEMI_ANNUAL', 'Semi-Annual'),
+        ('ANNUAL', 'Annual'),
+    ]
+    
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='loans')
+    loan_type = models.CharField(max_length=20, choices=LOAN_TYPE_CHOICES)
+    
+    # Loan Details
+    requested_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    approved_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    interest_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, help_text="Annual interest rate percentage")
+    term_months = models.IntegerField(help_text="Loan term in months")
+    repayment_frequency = models.CharField(max_length=20, choices=REPAYMENT_FREQUENCY_CHOICES, default='MONTHLY')
+    
+    # Application Details
+    purpose = models.TextField(help_text="Purpose of the loan")
+    employment_status = models.CharField(max_length=100, blank=True)
+    annual_income = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    monthly_expenses = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Status and Approval
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    application_date = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_loans')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    approval_notes = models.TextField(blank=True)
+    rejection_reason = models.TextField(blank=True)
+    
+    # Active Loan Details
+    disbursed_at = models.DateTimeField(null=True, blank=True)
+    first_payment_date = models.DateField(null=True, blank=True)
+    maturity_date = models.DateField(null=True, blank=True)
+    
+    # Calculated Fields
+    monthly_payment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    total_interest = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Metadata
+    application_data = models.JSONField(default=dict, blank=True, help_text="Additional application data")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.get_loan_type_display()} - ${self.requested_amount}"
+    
+    def calculate_monthly_payment(self):
+        """Calculate monthly payment using standard loan formula"""
+        if not self.approved_amount or not self.interest_rate or not self.term_months:
+            return None
+        
+        from decimal import Decimal
+        import math
+        
+        principal = float(self.approved_amount)
+        annual_rate = float(self.interest_rate) / 100
+        monthly_rate = annual_rate / 12
+        num_payments = self.term_months
+        
+        if monthly_rate == 0:
+            return Decimal(str(principal / num_payments))
+        
+        monthly_payment = principal * (monthly_rate * (1 + monthly_rate) ** num_payments) / ((1 + monthly_rate) ** num_payments - 1)
+        return Decimal(str(round(monthly_payment, 2)))
+    
+    def calculate_totals(self):
+        """Calculate total interest and total amount"""
+        if self.monthly_payment and self.term_months:
+            total_amount = self.monthly_payment * self.term_months
+            total_interest = total_amount - (self.approved_amount or 0)
+            return total_interest, total_amount
+        return None, None
+    
+    @property
+    def outstanding_balance(self):
+        """Calculate outstanding loan balance based on payments made"""
+        if self.status != 'ACTIVE' or not self.approved_amount:
+            return 0
+        
+        # Sum all loan payments made
+        payments_made = LedgerEntry.objects.filter(
+            entry_type='LOAN_PAYMENT',
+            external_data__loan_id=self.id,
+            status='POSTED'
+        ).aggregate(
+            total=Sum('postings__amount', filter=models.Q(postings__direction='CREDIT'))
+        )['total'] or 0
+        
+        return self.approved_amount - payments_made
+
+
+class LoanPayment(models.Model):
+    """Individual loan payment records"""
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('PAID', 'Paid'),
+        ('OVERDUE', 'Overdue'),
+        ('PARTIAL', 'Partial Payment'),
+    ]
+    
+    loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name='payments')
+    payment_number = models.IntegerField()
+    due_date = models.DateField()
+    scheduled_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    principal_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    interest_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED')
+    paid_at = models.DateTimeField(null=True, blank=True)
+    ledger_entry = models.ForeignKey(LedgerEntry, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['payment_number']
+        unique_together = ['loan', 'payment_number']
+    
+    def __str__(self):
+        return f"Payment {self.payment_number} for Loan {self.loan.id}"
+
+
 class CryptoDeposit(models.Model):
     """Crypto deposit requests with proof of payment for manual verification"""
     VERIFICATION_STATUS_CHOICES = [
@@ -399,6 +552,67 @@ class SupportMessage(models.Model):
     
     def __str__(self):
         return f"{self.conversation.id} - {self.sender_type} - {self.created_at}"
+
+
+class Notification(models.Model):
+    """User notifications for banking events"""
+    TYPE_CHOICES = [
+        ('TRANSACTION', 'Transaction'),
+        ('DEPOSIT', 'Deposit'),
+        ('WITHDRAWAL', 'Withdrawal'),
+        ('TRANSFER', 'Transfer'),
+        ('KYC', 'KYC Update'),
+        ('SECURITY', 'Security Alert'),
+        ('SYSTEM', 'System Notification'),
+        ('VIRTUAL_CARD', 'Virtual Card'),
+        ('CRYPTO', 'Crypto Deposit'),
+        ('SUPPORT', 'Support Message'),
+        ('LOAN', 'Loan'),
+        ('TAX_REFUND', 'Tax Refund'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent'),
+    ]
+    
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='notifications')
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='MEDIUM')
+    
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    
+    # Optional data for rich notifications
+    action_url = models.CharField(max_length=255, blank=True, help_text="URL to navigate when clicked")
+    metadata = models.JSONField(default=dict, blank=True, help_text="Additional data for the notification")
+    
+    # Status tracking
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['customer', '-created_at']),
+            models.Index(fields=['customer', 'is_read']),
+        ]
+    
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.title}"
+    
+    def mark_as_read(self):
+        """Mark notification as read"""
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=['is_read', 'read_at'])
 
 
 class VirtualCard(models.Model):
@@ -504,4 +718,234 @@ class VirtualCard(models.Model):
         today = date.today()
         self.expiry_year = today.year + 4
         self.expiry_month = today.month
+
+
+class TaxRefundApplication(models.Model):
+    """Tax refund applications submitted by customers"""
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('SUBMITTED', 'Submitted'),
+        ('UNDER_REVIEW', 'Under Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('PROCESSED', 'Processed'),
+    ]
+    
+    FILING_STATUS_CHOICES = [
+        ('SINGLE', 'Single'),
+        ('MARRIED_JOINT', 'Married Filing Jointly'),
+        ('MARRIED_SEPARATE', 'Married Filing Separately'),
+        ('HEAD_HOUSEHOLD', 'Head of Household'),
+        ('QUALIFYING_WIDOW', 'Qualifying Widow(er)'),
+    ]
+    
+    # Core relationships
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='tax_refund_applications')
+    
+    # Application identification
+    application_number = models.CharField(max_length=20, unique=True)
+    tax_year = models.IntegerField(default=2024)
+    
+    # Personal Information
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    middle_name = models.CharField(max_length=100, blank=True)
+    ssn = models.CharField(max_length=11, help_text="Format: XXX-XX-XXXX")  # Encrypted in production
+    date_of_birth = models.DateField()
+    
+    # Address Information
+    address_line_1 = models.CharField(max_length=255)
+    address_line_2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=50)
+    zip_code = models.CharField(max_length=10)
+    phone_number = models.CharField(max_length=20, blank=True)
+    email_address = models.EmailField()
+    
+    # Tax Information
+    filing_status = models.CharField(max_length=20, choices=FILING_STATUS_CHOICES)
+    total_income = models.DecimalField(max_digits=12, decimal_places=2)
+    federal_tax_withheld = models.DecimalField(max_digits=12, decimal_places=2)
+    state_tax_withheld = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    estimated_tax_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    number_of_dependents = models.IntegerField(default=0)
+    
+    # Deductions
+    use_standard_deduction = models.BooleanField(default=True)
+    mortgage_interest = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    charitable_donations = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    medical_expenses = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    business_expenses = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    education_expenses = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    other_deductions = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    # Calculated amounts
+    estimated_refund = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    approved_refund = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Application status and processing
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_tax_applications')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Admin notes and rejection reason
+    admin_notes = models.TextField(blank=True)
+    rejection_reason = models.TextField(blank=True)
+    
+    # Processing information
+    processing_time_estimate = models.CharField(max_length=50, default='7-14 business days')
+    refund_method = models.CharField(max_length=20, default='DIRECT_DEPOSIT')
+    
+    # Metadata
+    application_data = models.JSONField(default=dict, blank=True, help_text="Additional application data")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['customer', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['tax_year', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.application_number} - {self.first_name} {self.last_name} ({self.tax_year})"
+    
+    def save(self, *args, **kwargs):
+        if not self.application_number:
+            self.application_number = self._generate_application_number()
+        super().save(*args, **kwargs)
+    
+    def _generate_application_number(self):
+        """Generate unique application number"""
+        import uuid
+        return f"TR-{self.tax_year}-{uuid.uuid4().hex[:6].upper()}"
+    
+    def calculate_estimated_refund(self):
+        """Calculate estimated tax refund based on provided information"""
+        from decimal import Decimal
+        
+        # Standard deduction amounts for 2024
+        standard_deductions = {
+            'SINGLE': Decimal('13850'),
+            'MARRIED_JOINT': Decimal('27700'),
+            'MARRIED_SEPARATE': Decimal('13850'),
+            'HEAD_HOUSEHOLD': Decimal('20800'),
+            'QUALIFYING_WIDOW': Decimal('27700'),
+        }
+        
+        # Calculate total deductions
+        if self.use_standard_deduction:
+            total_deductions = standard_deductions.get(self.filing_status, Decimal('13850'))
+        else:
+            total_deductions = (
+                self.mortgage_interest + self.charitable_donations + 
+                self.medical_expenses + self.business_expenses + 
+                self.education_expenses + self.other_deductions
+            )
+        
+        # Calculate taxable income
+        taxable_income = max(Decimal('0'), self.total_income - total_deductions)
+        
+        # Simplified tax calculation (2024 tax brackets for single filers)
+        calculated_tax = Decimal('0')
+        
+        if self.filing_status == 'SINGLE':
+            if taxable_income <= 11000:
+                calculated_tax = taxable_income * Decimal('0.10')
+            elif taxable_income <= 44725:
+                calculated_tax = Decimal('1100') + (taxable_income - Decimal('11000')) * Decimal('0.12')
+            elif taxable_income <= 95375:
+                calculated_tax = Decimal('5147') + (taxable_income - Decimal('44725')) * Decimal('0.22')
+            elif taxable_income <= 182050:
+                calculated_tax = Decimal('16290') + (taxable_income - Decimal('95375')) * Decimal('0.24')
+            else:
+                calculated_tax = Decimal('37104') + (taxable_income - Decimal('182050')) * Decimal('0.32')
+        else:
+            # Simplified calculation for other filing statuses
+            # In a real system, you'd have proper tax tables
+            if taxable_income <= 22000:
+                calculated_tax = taxable_income * Decimal('0.10')
+            elif taxable_income <= 89450:
+                calculated_tax = Decimal('2200') + (taxable_income - Decimal('22000')) * Decimal('0.12')
+            else:
+                calculated_tax = Decimal('10294') + (taxable_income - Decimal('89450')) * Decimal('0.22')
+        
+        # Add dependent tax credits (simplified)
+        child_tax_credit = min(self.number_of_dependents * Decimal('2000'), calculated_tax)
+        calculated_tax = max(Decimal('0'), calculated_tax - child_tax_credit)
+        
+        # Calculate refund
+        total_tax_paid = self.federal_tax_withheld + self.estimated_tax_paid
+        estimated_refund = max(Decimal('0'), total_tax_paid - calculated_tax)
+        
+        self.estimated_refund = estimated_refund
+        return estimated_refund
+    
+    @property
+    def total_deductions(self):
+        """Calculate total deductions"""
+        if self.use_standard_deduction:
+            standard_deductions = {
+                'SINGLE': 13850,
+                'MARRIED_JOINT': 27700,
+                'MARRIED_SEPARATE': 13850,
+                'HEAD_HOUSEHOLD': 20800,
+                'QUALIFYING_WIDOW': 27700,
+            }
+            return standard_deductions.get(self.filing_status, 13850)
+        else:
+            return (
+                self.mortgage_interest + self.charitable_donations + 
+                self.medical_expenses + self.business_expenses + 
+                self.education_expenses + self.other_deductions
+            )
+
+
+class TaxRefundDocument(models.Model):
+    """Documents uploaded for tax refund applications"""
+    DOCUMENT_TYPE_CHOICES = [
+        ('W2', 'W-2 Form'),
+        ('1099', '1099 Form'),
+        ('1098', '1098 Form (Mortgage Interest)'),
+        ('RECEIPTS', 'Receipts/Supporting Documents'),
+        ('PREVIOUS_RETURN', 'Previous Year Tax Return'),
+        ('ID_DOCUMENT', 'Identification Document'),
+        ('OTHER', 'Other'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+    
+    application = models.ForeignKey(TaxRefundApplication, on_delete=models.CASCADE, related_name='documents')
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPE_CHOICES)
+    document_file = models.FileField(upload_to='tax_documents/')
+    document_name = models.CharField(max_length=255)
+    file_size = models.IntegerField(help_text="File size in bytes")
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    rejection_reason = models.TextField(blank=True)
+    
+    # Admin verification
+    verified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='verified_tax_documents')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True)
+    
+    # Timestamps
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.application.application_number} - {self.get_document_type_display()}"
 

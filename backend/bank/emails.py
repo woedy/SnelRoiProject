@@ -255,3 +255,48 @@ def send_transaction_status_email(entry_id, status):
         )
     except LedgerEntry.DoesNotExist:
         print(f"LedgerEntry {entry_id} not found for status email")
+
+
+def send_account_verification_email(user):
+    """Notify user that their account has been verified."""
+    subject = 'Account Verified - Welcome to SnelROI!'
+    
+    context = {
+        'user': user,
+    }
+    
+    html_message = render_to_string('emails/account_active.html', context)
+    plain_message = strip_tags(html_message)
+    
+    print(f"Sending account verification email to {user.email}")
+    send_mail(
+        subject,
+        plain_message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+        html_message=html_message
+    )
+
+
+def send_account_rejection_email(user, rejection_reason):
+    """Notify user that their account verification was rejected."""
+    subject = 'Account Verification Update'
+    
+    context = {
+        'user': user,
+        'rejection_reason': rejection_reason,
+    }
+    
+    html_message = render_to_string('emails/account_frozen.html', context)
+    plain_message = strip_tags(html_message)
+    
+    print(f"Sending account rejection email to {user.email}")
+    send_mail(
+        subject,
+        plain_message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+        html_message=html_message
+    )

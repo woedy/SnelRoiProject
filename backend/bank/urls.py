@@ -48,6 +48,25 @@ urlpatterns = [
     path('admin/transactions/<int:pk>/decline/', views.AdminTransactionDeclineView.as_view()),
     path('admin/users/', views.AdminUsersView.as_view()),
     path('admin/users/<int:pk>/', views.AdminUserDetailView.as_view()),
+    
+    # Loan Endpoints
+    path('loans/', views.LoansView.as_view()),
+    path('loans/<int:pk>/', views.LoanDetailView.as_view()),
+    path('loans/<int:pk>/payments/', views.LoanPaymentsView.as_view()),
+    
+    # Admin Loan Endpoints
+    path('admin/loans/', views.AdminLoansView.as_view()),
+    path('admin/loans/<int:pk>/', views.AdminLoanDetailView.as_view()),
+    path('admin/loans/<int:pk>/approve/', views.AdminLoanApproveView.as_view()),
+    path('admin/loans/<int:pk>/reject/', views.AdminLoanRejectView.as_view()),
+    path('admin/loans/<int:pk>/disburse/', views.AdminLoanDisburseView.as_view()),
+    
+    # Notification Endpoints
+    path('notifications/', views.NotificationsView.as_view()),
+    path('notifications/<int:pk>/', views.NotificationDetailView.as_view()),
+    path('notifications/mark-all-read/', views.NotificationMarkAllReadView.as_view()),
+    path('notifications/unread-count/', views.NotificationUnreadCountView.as_view()),
+    path('notifications/<int:pk>/delete/', views.NotificationDeleteView.as_view()),
 
     # Virtual Card Endpoints
     path('virtual-cards/', views.VirtualCardsView.as_view()),
@@ -77,4 +96,16 @@ urlpatterns = [
     path('admin/kyc/documents/', views.AdminKYCDocumentsView.as_view()),
     path('admin/kyc/documents/<int:pk>/', views.AdminKYCDocumentDetailView.as_view()),
     path('admin/kyc/profiles/', views.AdminKYCProfilesView.as_view()),
+    path('admin/kyc/profiles/<int:pk>/', views.AdminKYCProfileDetailView.as_view()),
+    
+    # Tax Refund Endpoints
+    path('tax-refunds/calculator/', views.TaxRefundCalculatorView.as_view()),
+    path('tax-refunds/', views.TaxRefundApplicationListView.as_view()),
+    path('tax-refunds/<int:pk>/', views.TaxRefundApplicationDetailView.as_view()),
+    path('tax-refunds/<int:application_pk>/documents/', views.TaxRefundDocumentUploadView.as_view()),
+    
+    # Admin Tax Refund Endpoints
+    path('admin/tax-refunds/', views.AdminTaxRefundApplicationListView.as_view()),
+    path('admin/tax-refunds/<int:pk>/', views.AdminTaxRefundApplicationDetailView.as_view()),
+    path('admin/tax-refunds/stats/', views.AdminTaxRefundStatsView.as_view()),
 ]

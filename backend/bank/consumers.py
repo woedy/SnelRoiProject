@@ -7,6 +7,103 @@ from .serializers import SupportMessageSerializer
 
 logger = logging.getLogger(__name__)
 
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for real-time notifications"""
+    
+    async def connect(self):
+        self.user = self.scope.get('user')
+        
+        # Verify user is authenticated
+        if not self.user or not self.user.is_authenticated:
+            logger.warning("Unauthorized WebSocket connection attempt for notifications")
+            await self.close(code=4001)
+            return
+        
+        self.notification_group_name = f'notifications_{self.user.id}'
+        
+        # Join notification group
+        await self.channel_layer.group_add(
+            self.notification_group_name,
+            self.channel_name
+        )
+        
+        await self.accept()
+        
+        logger.info(f"Notification WebSocket connected: user={self.user.id}")
+        
+        # Send connection confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'connection_established',
+            'message': 'Connected to notifications'
+        }))
+    
+    async def disconnect(self, close_code):
+        # Leave notification group
+        if hasattr(self, 'notification_group_name'):
+            await self.channel_layer.group_discard(
+                self.notification_group_name,
+                self.channel_name
+            )
+        
+        logger.info(f"Notification WebSocket disconnected: user={self.user.id if self.user else 'unknown'}, code={close_code}")
+    
+    async def receive(self, text_data):
+        """Handle incoming WebSocket messages"""
+        try:
+            text_data_json = json.loads(text_data)
+            message_type = text_data_json.get('type', 'ping')
+            
+            if message_type == 'ping':
+                # Respond to heartbeat
+                await self.send(text_data=json.dumps({
+                    'type': 'pong'
+                }))
+            
+            elif message_type == 'mark_read':
+                # Mark notification as read
+                notification_id = text_data_json.get('notification_id')
+                if notification_id:
+                    success = await self.mark_notification_read(notification_id)
+                    await self.send(text_data=json.dumps({
+                        'type': 'mark_read_response',
+                        'notification_id': notification_id,
+                        'success': success
+                    }))
+                    
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON received in notification WebSocket: {text_data}")
+        except Exception as e:
+            logger.error(f"Error in notification WebSocket receive: {e}", exc_info=True)
+    
+    async def notification_message(self, event):
+        """Handle notification message from group"""
+        notification = event['notification']
+        
+        await self.send(text_data=json.dumps({
+            'type': 'notification',
+            'notification': notification
+        }))
+    
+    @database_sync_to_async
+    def mark_notification_read(self, notification_id):
+        """Mark a notification as read"""
+        try:
+            from .models import Notification
+            notification = Notification.objects.get(
+                id=notification_id,
+                customer=self.user.profile
+            )
+            notification.mark_as_read()
+            return True
+        except Notification.DoesNotExist:
+            logger.warning(f"Notification not found: {notification_id} for user {self.user.id}")
+            return False
+        except Exception as e:
+            logger.error(f"Error marking notification as read: {e}", exc_info=True)
+            return False
+
+
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.conversation_id = self.scope['url_route']['kwargs']['conversation_id']

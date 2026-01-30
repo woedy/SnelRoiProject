@@ -13,6 +13,19 @@ def auto_post_entry(entry_id):
         return
     approver = entry.created_by
     approve_entry(entry, approver)
+    
+    # Create notification for the customer when deposit is auto-posted
+    if entry.entry_type == 'DEPOSIT':
+        from .services import create_transaction_notification
+        customer = entry.postings.first().account.customer
+        amount = entry.postings.filter(direction='CREDIT').first().amount
+        create_transaction_notification(
+            customer=customer,
+            transaction_type='DEPOSIT',
+            amount=amount,
+            status='POSTED',
+            reference=entry.reference
+        )
 
 
 @shared_task

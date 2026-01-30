@@ -29,14 +29,22 @@ export const UserProfileDropdown: React.FC = () => {
     navigate('/');
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  const getInitials = (firstName: string, lastName: string) => {
+    const initials = [];
+    if (firstName) initials.push(firstName.charAt(0));
+    if (lastName) initials.push(lastName.charAt(0));
+    return initials.join('').toUpperCase() || 'U';
   };
+
+  const getFullName = (firstName: string, lastName: string) => {
+    const parts = [];
+    if (firstName) parts.push(firstName);
+    if (lastName) parts.push(lastName);
+    return parts.join(' ') || 'User';
+  };
+
+  const userFullName = user ? getFullName(user.first_name, user.last_name) : 'User';
+  const userInitials = user ? getInitials(user.first_name, user.last_name) : 'U';
 
   return (
     <DropdownMenu>
@@ -44,11 +52,11 @@ export const UserProfileDropdown: React.FC = () => {
         <Button variant="ghost" className="flex items-center gap-2 h-auto p-2">
           <Avatar className="h-9 w-9">
             <AvatarFallback className="bg-primary text-primary-foreground font-medium text-sm">
-              {user?.name ? getInitials(user.name) : 'U'}
+              {userInitials}
             </AvatarFallback>
           </Avatar>
           <div className="hidden sm:flex flex-col items-start">
-            <span className="text-sm font-medium">{user?.name || 'User'}</span>
+            <span className="text-sm font-medium">{userFullName}</span>
             <span className="text-xs text-muted-foreground">{user?.email}</span>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -58,7 +66,7 @@ export const UserProfileDropdown: React.FC = () => {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user?.name || 'User'}</p>
+            <p className="text-sm font-medium leading-none">{userFullName}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user?.email}
             </p>

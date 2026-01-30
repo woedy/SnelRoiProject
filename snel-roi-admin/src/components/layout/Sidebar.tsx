@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin, MessageSquare, CreditCard as VirtualCard } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin, MessageSquare, CreditCard as VirtualCard, Banknote, Shield } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
@@ -11,8 +11,10 @@ const sidebarItems = [
   { icon: Users, label: "Users", href: "/users" },
   { icon: Wallet, label: "Accounts", href: "/accounts" },
   { icon: CreditCard, label: "Transactions", href: "/transactions" },
+  { icon: Banknote, label: "Loans", href: "/loans" },
   { icon: VirtualCard, label: "Virtual Cards", href: "/virtual-cards" },
   { icon: Bitcoin, label: "Crypto Wallets", href: "/crypto-wallets" },
+  { icon: Shield, label: "KYC Management", href: "/kyc" },
   { icon: MessageSquare, label: "Support", href: "/support" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];

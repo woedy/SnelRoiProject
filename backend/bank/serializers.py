@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument
 from .services import create_customer_account
 
 User = get_user_model()
@@ -288,7 +288,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerProfile
         fields = [
-            'full_name', 'middle_name', 'phone', 'country', 'preferred_language',
+            'id', 'full_name', 'middle_name', 'phone', 'country', 'preferred_language',
             'date_of_birth', 'gender', 'gender_display', 'nationality', 'occupation',
             'address_line_1', 'address_line_2', 'city', 'state_province', 'postal_code',
             'kyc_status', 'kyc_status_display', 'kyc_submitted_at', 'kyc_verified_at',
@@ -698,3 +698,318 @@ class VirtualCardApprovalSerializer(serializers.Serializer):
         if action == 'decline' and not value.strip():
             raise serializers.ValidationError("Admin notes are required when declining an application")
         return value.strip() if value else ''
+
+
+class LoanSerializer(serializers.ModelSerializer):
+    loan_type_display = serializers.CharField(source='get_loan_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    repayment_frequency_display = serializers.CharField(source='get_repayment_frequency_display', read_only=True)
+    outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    
+    class Meta:
+        model = Loan
+        fields = [
+            'id', 'customer_name', 'customer_email', 'loan_type', 'loan_type_display',
+            'requested_amount', 'approved_amount', 'interest_rate', 'term_months',
+            'repayment_frequency', 'repayment_frequency_display', 'purpose',
+            'employment_status', 'annual_income', 'monthly_expenses', 'status',
+            'status_display', 'application_date', 'reviewed_at', 'approval_notes',
+            'rejection_reason', 'disbursed_at', 'first_payment_date', 'maturity_date',
+            'monthly_payment', 'total_interest', 'total_amount', 'outstanding_balance',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'customer_name', 'customer_email', 'status', 'application_date',
+            'reviewed_at', 'approval_notes', 'rejection_reason', 'disbursed_at',
+            'first_payment_date', 'maturity_date', 'monthly_payment', 'total_interest',
+            'total_amount', 'outstanding_balance', 'created_at', 'updated_at'
+        ]
+
+
+class LoanApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Loan
+        fields = [
+            'loan_type', 'requested_amount', 'term_months', 'purpose',
+            'employment_status', 'annual_income', 'monthly_expenses',
+            'repayment_frequency', 'application_data'
+        ]
+    
+    def validate_requested_amount(self, value):
+        if value < 1000:
+            raise serializers.ValidationError("Minimum loan amount is $1,000")
+        if value > 500000:
+            raise serializers.ValidationError("Maximum loan amount is $500,000")
+        return value
+    
+    def validate_term_months(self, value):
+        if value < 6:
+            raise serializers.ValidationError("Minimum loan term is 6 months")
+        if value > 360:
+            raise serializers.ValidationError("Maximum loan term is 360 months (30 years)")
+        return value
+
+
+class LoanPaymentSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = LoanPayment
+        fields = [
+            'id', 'payment_number', 'due_date', 'scheduled_amount', 'paid_amount',
+            'principal_amount', 'interest_amount', 'status', 'status_display',
+            'paid_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class AdminLoanSerializer(serializers.ModelSerializer):
+    loan_type_display = serializers.CharField(source='get_loan_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    customer_email = serializers.CharField(source='customer.user.email', read_only=True)
+    customer_kyc_status = serializers.CharField(source='customer.kyc_status', read_only=True)
+    customer_tier = serializers.CharField(source='customer.tier', read_only=True)
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True)
+    outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = Loan
+        fields = '__all__'
+
+
+class LoanApprovalSerializer(serializers.Serializer):
+    approved_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    interest_rate = serializers.DecimalField(max_digits=5, decimal_places=2)
+    approval_notes = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate_approved_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Approved amount must be greater than 0")
+        return value
+    
+    def validate_interest_rate(self, value):
+        if value < 0 or value > 50:
+            raise serializers.ValidationError("Interest rate must be between 0% and 50%")
+        return value
+
+
+class LoanRejectionSerializer(serializers.Serializer):
+    rejection_reason = serializers.CharField(required=True)
+    
+    def validate_rejection_reason(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Rejection reason is required")
+        return value
+
+
+class LoanPaymentRequestSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Payment amount must be greater than 0")
+        return value
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Serializer for user notifications"""
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'notification_type', 'priority', 'title', 'message',
+            'action_url', 'metadata', 'is_read', 'read_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'read_at']
+
+
+class NotificationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating notifications"""
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'customer', 'notification_type', 'priority', 'title', 'message',
+            'action_url', 'metadata'
+        ]
+
+
+class NotificationUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating notification read status"""
+    
+    class Meta:
+        model = Notification
+        fields = ['is_read']
+
+
+# ============ Tax Refund Serializers ============
+
+class TaxRefundDocumentSerializer(serializers.ModelSerializer):
+    """Serializer for tax refund documents"""
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaxRefundDocument
+        fields = [
+            'id', 'document_type', 'document_type_display', 'document_name',
+            'file_size', 'status', 'status_display', 'file_url',
+            'rejection_reason', 'uploaded_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'file_size', 'uploaded_at', 'updated_at']
+    
+    def get_file_url(self, obj):
+        if obj.document_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.document_file.url)
+        return None
+
+
+class TaxRefundApplicationSerializer(serializers.ModelSerializer):
+    """Serializer for tax refund applications"""
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    filing_status_display = serializers.CharField(source='get_filing_status_display', read_only=True)
+    documents = TaxRefundDocumentSerializer(many=True, read_only=True)
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    total_deductions = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = TaxRefundApplication
+        fields = [
+            'id', 'application_number', 'tax_year', 'status', 'status_display',
+            'first_name', 'last_name', 'middle_name', 'ssn', 'date_of_birth',
+            'address_line_1', 'address_line_2', 'city', 'state', 'zip_code',
+            'phone_number', 'email_address', 'filing_status', 'filing_status_display',
+            'total_income', 'federal_tax_withheld', 'state_tax_withheld',
+            'estimated_tax_paid', 'number_of_dependents', 'use_standard_deduction',
+            'mortgage_interest', 'charitable_donations', 'medical_expenses',
+            'business_expenses', 'education_expenses', 'other_deductions',
+            'total_deductions', 'estimated_refund', 'approved_refund',
+            'submitted_at', 'reviewed_at', 'processed_at', 'processing_time_estimate',
+            'refund_method', 'documents', 'customer_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'application_number', 'estimated_refund', 'approved_refund',
+            'submitted_at', 'reviewed_at', 'processed_at', 'customer_name',
+            'created_at', 'updated_at'
+        ]
+
+
+class TaxRefundApplicationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating tax refund applications"""
+    
+    class Meta:
+        model = TaxRefundApplication
+        fields = [
+            'tax_year', 'first_name', 'last_name', 'middle_name', 'ssn',
+            'date_of_birth', 'address_line_1', 'address_line_2', 'city',
+            'state', 'zip_code', 'phone_number', 'email_address',
+            'filing_status', 'total_income', 'federal_tax_withheld',
+            'state_tax_withheld', 'estimated_tax_paid', 'number_of_dependents',
+            'use_standard_deduction', 'mortgage_interest', 'charitable_donations',
+            'medical_expenses', 'business_expenses', 'education_expenses',
+            'other_deductions', 'refund_method'
+        ]
+    
+    def validate_ssn(self, value):
+        """Validate SSN format"""
+        import re
+        if not re.match(r'^\d{3}-\d{2}-\d{4}$', value):
+            raise serializers.ValidationError("SSN must be in format XXX-XX-XXXX")
+        return value
+    
+    def validate_total_income(self, value):
+        """Validate income is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Total income must be greater than 0")
+        return value
+    
+    def validate_federal_tax_withheld(self, value):
+        """Validate federal tax withheld is not negative"""
+        if value < 0:
+            raise serializers.ValidationError("Federal tax withheld cannot be negative")
+        return value
+
+
+class TaxRefundCalculatorSerializer(serializers.Serializer):
+    """Serializer for tax refund calculator"""
+    tax_year = serializers.IntegerField(default=2024)
+    filing_status = serializers.ChoiceField(choices=TaxRefundApplication.FILING_STATUS_CHOICES)
+    total_income = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    federal_tax_withheld = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    estimated_tax_paid = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    number_of_dependents = serializers.IntegerField(min_value=0, default=0)
+    use_standard_deduction = serializers.BooleanField(default=True)
+    
+    # Itemized deductions (only used if use_standard_deduction is False)
+    mortgage_interest = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    charitable_donations = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    medical_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    business_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    education_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    other_deductions = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+
+
+class AdminTaxRefundApplicationSerializer(TaxRefundApplicationSerializer):
+    """Admin serializer with additional fields for tax refund applications"""
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True)
+    
+    class Meta(TaxRefundApplicationSerializer.Meta):
+        fields = TaxRefundApplicationSerializer.Meta.fields + [
+            'admin_notes', 'rejection_reason', 'reviewed_by_name'
+        ]
+        read_only_fields = TaxRefundApplicationSerializer.Meta.read_only_fields + [
+            'reviewed_by_name'
+        ]
+
+
+class TaxRefundApprovalSerializer(serializers.Serializer):
+    """Serializer for approving/rejecting tax refund applications"""
+    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    approved_refund = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=0, required=False
+    )
+    admin_notes = serializers.CharField(required=False, allow_blank=True)
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        if data['action'] == 'approve' and not data.get('approved_refund'):
+            raise serializers.ValidationError({
+                'approved_refund': 'Approved refund amount is required when approving'
+            })
+        if data['action'] == 'reject' and not data.get('rejection_reason'):
+            raise serializers.ValidationError({
+                'rejection_reason': 'Rejection reason is required when rejecting'
+            })
+        return data
+
+
+class TaxRefundDocumentUploadSerializer(serializers.ModelSerializer):
+    """Serializer for uploading tax refund documents"""
+    
+    class Meta:
+        model = TaxRefundDocument
+        fields = ['document_type', 'document_file', 'document_name']
+    
+    def validate_document_file(self, value):
+        """Validate file size and type"""
+        # Max file size: 10MB
+        max_size = 10 * 1024 * 1024
+        if value.size > max_size:
+            raise serializers.ValidationError("File size cannot exceed 10MB")
+        
+        # Allowed file types
+        allowed_types = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']
+        file_extension = value.name.split('.')[-1].lower()
+        if file_extension not in allowed_types:
+            raise serializers.ValidationError(
+                f"File type '{file_extension}' not allowed. "
+                f"Allowed types: {', '.join(allowed_types)}"
+            )
+        
+        return value

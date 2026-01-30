@@ -108,6 +108,19 @@ export const adminKycService = {
     const queryString = searchParams.toString();
     return apiRequest<CustomerProfile[]>(`/admin/kyc/profiles/${queryString ? `?${queryString}` : ''}`);
   },
+
+  verifyKYCProfile: (
+    profileId: number,
+    data: {
+      action: 'verify' | 'reject';
+      rejection_reason?: string;
+    }
+  ): Promise<CustomerProfile> => {
+    return apiRequest<CustomerProfile>(`/admin/kyc/profiles/${profileId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 export const getKYCStatusColor = (status: string) => {
