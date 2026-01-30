@@ -141,3 +141,32 @@ export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {
   }
   return JSON.parse(text) as T;
 };
+// API object with common HTTP methods
+export const api = {
+  get: <T>(path: string, options?: ApiRequestOptions) => 
+    apiRequest<T>(path, { ...options, method: 'GET' }),
+  
+  post: <T>(path: string, data?: any, options?: ApiRequestOptions) => 
+    apiRequest<T>(path, { 
+      ...options, 
+      method: 'POST', 
+      body: data instanceof FormData ? data : JSON.stringify(data) 
+    }),
+  
+  put: <T>(path: string, data?: any, options?: ApiRequestOptions) => 
+    apiRequest<T>(path, { 
+      ...options, 
+      method: 'PUT', 
+      body: data instanceof FormData ? data : JSON.stringify(data) 
+    }),
+  
+  patch: <T>(path: string, data?: any, options?: ApiRequestOptions) => 
+    apiRequest<T>(path, { 
+      ...options, 
+      method: 'PATCH', 
+      body: data instanceof FormData ? data : JSON.stringify(data) 
+    }),
+  
+  delete: <T>(path: string, options?: ApiRequestOptions) => 
+    apiRequest<T>(path, { ...options, method: 'DELETE' }),
+};

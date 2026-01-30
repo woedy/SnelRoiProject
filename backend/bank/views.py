@@ -14,7 +14,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -2492,3 +2492,302 @@ class AdminTaxRefundStatsView(APIView):
         }
         
         return Response(stats)
+
+# ============ Grant Views ============
+
+class GrantsView(APIView):
+    """List available grants"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        from .serializers import GrantSerializer
+        
+        grants = Grant.objects.filter(status='AVAILABLE').order_by('-created_at')
+        
+        # Filter by category if provided
+        category = request.query_params.get('category')
+        if category and category != 'all':
+            grants = grants.filter(category=category)
+        
+        # Search functionality
+        search = request.query_params.get('search')
+        if search:
+            grants = grants.filter(
+                Q(title__icontains=search) |
+                Q(description__icontains=search) |
+                Q(provider__icontains=search)
+            )
+        
+        serializer = GrantSerializer(grants, many=True)
+        return Response(serializer.data)
+
+
+class GrantApplicationsView(APIView):
+    """List and create grant applications"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        from .serializers import GrantApplicationSerializer
+        
+        applications = GrantApplication.objects.filter(
+            customer=request.user.profile
+        ).order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter and status_filter != 'all':
+            applications = applications.filter(status=status_filter.upper())
+        
+        serializer = GrantApplicationSerializer(applications, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        from .serializers import GrantApplicationCreateSerializer
+        from .services import create_grant_application
+        
+        serializer = GrantApplicationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Check if user already applied for this grant
+        grant = serializer.validated_data['grant']
+        existing_application = GrantApplication.objects.filter(
+            customer=request.user.profile,
+            grant=grant
+        ).first()
+        
+        if existing_application:
+            return Response(
+                {'detail': 'You have already applied for this grant'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            application = create_grant_application(
+                customer=request.user.profile,
+                application_data=serializer.validated_data
+            )
+            
+            response_serializer = GrantApplicationSerializer(application)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error creating application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class GrantApplicationDetailView(APIView):
+    """Get and update grant application details"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self, pk, user):
+        try:
+            return GrantApplication.objects.get(pk=pk, customer=user.profile)
+        except GrantApplication.DoesNotExist:
+            return None
+    
+    def get(self, request, pk):
+        from .serializers import GrantApplicationSerializer
+        
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = GrantApplicationSerializer(application)
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Submit application for review"""
+        application = self.get_object(pk, request.user)
+        if not application:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status != 'DRAFT':
+            return Response(
+                {'detail': 'Only draft applications can be submitted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        action = request.data.get('action')
+        if action == 'submit':
+            from .services import submit_grant_application
+            
+            try:
+                submit_grant_application(application)
+                
+                response_serializer = GrantApplicationSerializer(application)
+                return Response(response_serializer.data)
+            
+            except Exception as e:
+                return Response(
+                    {'detail': f'Error submitting application: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        return Response(
+            {'detail': 'Invalid action'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# ============ Admin Grant Views ============
+
+class AdminGrantsView(APIView):
+    """Admin view for managing grants"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .serializers import AdminGrantSerializer
+        
+        grants = Grant.objects.all().order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            grants = grants.filter(status=status_filter)
+        
+        serializer = AdminGrantSerializer(grants, many=True)
+        return Response(serializer.data)
+    
+    def post(self, request):
+        from .serializers import GrantSerializer
+        
+        serializer = GrantSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        grant = serializer.save(created_by=request.user)
+        
+        response_serializer = AdminGrantSerializer(grant)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AdminGrantDetailView(APIView):
+    """Admin view for managing individual grants"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        from .serializers import AdminGrantSerializer
+        
+        try:
+            grant = Grant.objects.get(pk=pk)
+        except Grant.DoesNotExist:
+            return Response(
+                {'detail': 'Grant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = AdminGrantSerializer(grant)
+        return Response(serializer.data)
+    
+    def put(self, request, pk):
+        from .serializers import GrantSerializer
+        
+        try:
+            grant = Grant.objects.get(pk=pk)
+        except Grant.DoesNotExist:
+            return Response(
+                {'detail': 'Grant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = GrantSerializer(grant, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        response_serializer = AdminGrantSerializer(grant)
+        return Response(response_serializer.data)
+
+
+class AdminGrantApplicationsView(APIView):
+    """Admin view for managing grant applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .serializers import AdminGrantApplicationSerializer
+        
+        applications = GrantApplication.objects.all().order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            applications = applications.filter(status=status_filter)
+        
+        # Filter by grant if provided
+        grant_id = request.query_params.get('grant_id')
+        if grant_id:
+            applications = applications.filter(grant_id=grant_id)
+        
+        serializer = AdminGrantApplicationSerializer(applications, many=True)
+        return Response(serializer.data)
+
+
+class AdminGrantApplicationDetailView(APIView):
+    """Admin view for managing individual grant applications"""
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        from .serializers import AdminGrantApplicationSerializer
+        
+        try:
+            application = GrantApplication.objects.get(pk=pk)
+        except GrantApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = AdminGrantApplicationSerializer(application)
+        return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        """Approve or reject grant application"""
+        from .serializers import GrantApplicationApprovalSerializer
+        from .services import approve_grant_application, reject_grant_application
+        
+        try:
+            application = GrantApplication.objects.get(pk=pk)
+        except GrantApplication.DoesNotExist:
+            return Response(
+                {'detail': 'Application not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if application.status not in ['SUBMITTED', 'UNDER_REVIEW']:
+            return Response(
+                {'detail': 'Application cannot be processed in current status'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = GrantApplicationApprovalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            if serializer.validated_data['action'] == 'approve':
+                approve_grant_application(
+                    application=application,
+                    approver=request.user,
+                    admin_notes=serializer.validated_data.get('admin_notes', '')
+                )
+            else:
+                reject_grant_application(
+                    application=application,
+                    approver=request.user,
+                    rejection_reason=serializer.validated_data['rejection_reason'],
+                    admin_notes=serializer.validated_data.get('admin_notes', '')
+                )
+            
+            response_serializer = AdminGrantApplicationSerializer(application)
+            return Response(response_serializer.data)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error processing application: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )

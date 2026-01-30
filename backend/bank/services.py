@@ -1079,3 +1079,189 @@ def create_tax_refund_notification(customer, status, application_number, amount=
         action_url='/app/tax-refund',
         metadata=metadata
     )
+
+# ============ Grant Services ============
+
+def create_grant_application(customer, application_data):
+    """Create a new grant application"""
+    from .models import GrantApplication
+    
+    application = GrantApplication.objects.create(
+        customer=customer,
+        **application_data
+    )
+    
+    # Create notification for application creation
+    create_notification(
+        customer=customer,
+        notification_type='SYSTEM',
+        title='Grant Application Created',
+        message=f'Your application for "{application.grant.title}" has been saved as a draft.',
+        priority='LOW',
+        action_url=f'/app/grants?application={application.id}',
+        metadata={
+            'application_id': application.id,
+            'grant_id': application.grant.id,
+            'grant_title': application.grant.title,
+            'status': 'draft'
+        }
+    )
+    
+    return application
+
+
+def submit_grant_application(application):
+    """Submit a grant application for review"""
+    from datetime import date
+    
+    # Validate grant is still available and not past deadline
+    if application.grant.status != 'AVAILABLE':
+        raise ValueError('This grant is no longer available')
+    
+    if application.grant.deadline < date.today():
+        raise ValueError('This grant\'s deadline has passed')
+    
+    # Update application status
+    application.status = 'SUBMITTED'
+    application.submitted_at = timezone.now()
+    application.save(update_fields=['status', 'submitted_at'])
+    
+    # Create notification for submission
+    create_notification(
+        customer=application.customer,
+        notification_type='SYSTEM',
+        title='Grant Application Submitted',
+        message=f'Your application for "{application.grant.title}" has been submitted for review.',
+        priority='MEDIUM',
+        action_url=f'/app/grants?application={application.id}',
+        metadata={
+            'application_id': application.id,
+            'grant_id': application.grant.id,
+            'grant_title': application.grant.title,
+            'status': 'submitted',
+            'requested_amount': str(application.requested_amount)
+        }
+    )
+    
+    return application
+
+
+def approve_grant_application(application, approver, admin_notes=''):
+    """Approve a grant application and process the grant"""
+    from decimal import Decimal
+    
+    # Get customer's primary account
+    customer_account = Account.objects.filter(
+        customer=application.customer,
+        type='CHECKING',
+        status='ACTIVE'
+    ).first()
+    
+    if not customer_account:
+        raise ValueError('Customer does not have an active checking account')
+    
+    # Get system accounts
+    system_account, _ = get_system_accounts()
+    
+    with transaction.atomic():
+        # Update application status
+        application.status = 'APPROVED'
+        application.reviewed_by = approver
+        application.reviewed_at = timezone.now()
+        application.admin_notes = admin_notes
+        application.save(update_fields=[
+            'status', 'reviewed_by', 'reviewed_at', 'admin_notes'
+        ])
+        
+        # Create grant disbursement ledger entry
+        entry = create_entry(
+            'DEPOSIT', 
+            approver, 
+            f'Grant disbursement: {application.grant.title} - {application.project_title}'
+        )
+        
+        # Debit system account (grant funds out)
+        add_posting(
+            entry, 
+            system_account, 
+            'DEBIT', 
+            application.requested_amount, 
+            f'Grant to {customer_account.account_number}'
+        )
+        
+        # Credit customer account (grant funds in)
+        add_posting(
+            entry, 
+            customer_account, 
+            'CREDIT', 
+            application.requested_amount, 
+            f'Grant: {application.grant.title}'
+        )
+        
+        # Store grant metadata
+        entry.external_data = {
+            'grant_application_id': application.id,
+            'grant_id': application.grant.id,
+            'grant_title': application.grant.title,
+            'project_title': application.project_title,
+            'customer_account': customer_account.account_number,
+            'grant_details': {
+                'category': application.grant.category,
+                'provider': application.grant.provider,
+                'requested_amount': str(application.requested_amount),
+                'project_description': application.project_description[:500]  # Truncate for storage
+            }
+        }
+        entry.save()
+        
+        # Auto-approve the grant entry
+        approve_entry(entry, approver)
+        
+        # Create notification for approval
+        create_notification(
+            customer=application.customer,
+            notification_type='SYSTEM',
+            title='Grant Approved!',
+            message=f'Congratulations! Your grant application for "{application.grant.title}" has been approved. ${application.requested_amount} has been deposited to your account.',
+            priority='HIGH',
+            action_url=f'/app/grants?application={application.id}',
+            metadata={
+                'application_id': application.id,
+                'grant_id': application.grant.id,
+                'grant_title': application.grant.title,
+                'approved_amount': str(application.requested_amount),
+                'status': 'approved'
+            }
+        )
+    
+    return entry
+
+
+def reject_grant_application(application, approver, rejection_reason, admin_notes=''):
+    """Reject a grant application"""
+    application.status = 'REJECTED'
+    application.reviewed_by = approver
+    application.reviewed_at = timezone.now()
+    application.rejection_reason = rejection_reason
+    application.admin_notes = admin_notes
+    application.save(update_fields=[
+        'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'admin_notes'
+    ])
+    
+    # Create notification for rejection
+    create_notification(
+        customer=application.customer,
+        notification_type='SYSTEM',
+        title='Grant Application Update',
+        message=f'Your grant application for "{application.grant.title}" has been reviewed. Please check the application details for more information.',
+        priority='MEDIUM',
+        action_url=f'/app/grants?application={application.id}',
+        metadata={
+            'application_id': application.id,
+            'grant_id': application.grant.id,
+            'grant_title': application.grant.title,
+            'status': 'rejected'
+        }
+    )
+    
+    return application

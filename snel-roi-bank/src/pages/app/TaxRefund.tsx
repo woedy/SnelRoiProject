@@ -716,7 +716,14 @@ const TaxRefund = () => {
                           {stateOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
-                         ssName="text-lg font-semibold flex items-center gap-2">
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Upload className="h-5 w-5" />
                     Required Documents
                   </h3>

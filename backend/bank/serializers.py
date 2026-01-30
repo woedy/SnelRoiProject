@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
 from .services import create_customer_account
 
 User = get_user_model()
@@ -1013,3 +1013,110 @@ class TaxRefundDocumentUploadSerializer(serializers.ModelSerializer):
             )
         
         return value
+
+
+# ============ Grant Serializers ============
+
+class GrantSerializer(serializers.ModelSerializer):
+    """Serializer for grant opportunities"""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    is_deadline_soon = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Grant
+        fields = [
+            'id', 'title', 'description', 'category', 'category_display',
+            'provider', 'amount', 'deadline', 'status', 'status_display',
+            'eligibility_requirements', 'is_deadline_soon', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class GrantApplicationSerializer(serializers.ModelSerializer):
+    """Serializer for grant applications"""
+    grant_details = GrantSerializer(source='grant', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = GrantApplication
+        fields = [
+            'id', 'grant', 'grant_details', 'first_name', 'last_name', 'email',
+            'organization', 'project_title', 'project_description', 'requested_amount',
+            'project_timeline', 'status', 'status_display', 'submitted_at', 'created_at'
+        ]
+        read_only_fields = ['id', 'status', 'submitted_at', 'created_at']
+
+
+class GrantApplicationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating grant applications"""
+    
+    class Meta:
+        model = GrantApplication
+        fields = [
+            'grant', 'first_name', 'last_name', 'email', 'organization',
+            'project_title', 'project_description', 'requested_amount', 'project_timeline'
+        ]
+    
+    def validate_requested_amount(self, value):
+        """Validate requested amount doesn't exceed grant amount"""
+        grant = self.initial_data.get('grant')
+        if grant:
+            try:
+                grant_obj = Grant.objects.get(id=grant)
+                if value > grant_obj.amount:
+                    raise serializers.ValidationError(
+                        f"Requested amount cannot exceed grant amount of ${grant_obj.amount}"
+                    )
+            except Grant.DoesNotExist:
+                pass
+        return value
+    
+    def validate_grant(self, value):
+        """Validate grant is available and not past deadline"""
+        if value.status != 'AVAILABLE':
+            raise serializers.ValidationError("This grant is not currently available")
+        
+        from datetime import date
+        if value.deadline < date.today():
+            raise serializers.ValidationError("This grant's deadline has passed")
+        
+        return value
+
+
+class AdminGrantSerializer(GrantSerializer):
+    """Admin serializer with additional fields for grants"""
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    applications_count = serializers.SerializerMethodField()
+    
+    class Meta(GrantSerializer.Meta):
+        fields = GrantSerializer.Meta.fields + ['created_by_name', 'applications_count']
+    
+    def get_applications_count(self, obj):
+        return obj.applications.count()
+
+
+class AdminGrantApplicationSerializer(GrantApplicationSerializer):
+    """Admin serializer with additional fields for grant applications"""
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    reviewed_by_name = serializers.CharField(source='reviewed_by.get_full_name', read_only=True)
+    
+    class Meta(GrantApplicationSerializer.Meta):
+        fields = GrantApplicationSerializer.Meta.fields + [
+            'customer_name', 'admin_notes', 'rejection_reason', 
+            'reviewed_by_name', 'reviewed_at'
+        ]
+
+
+class GrantApplicationApprovalSerializer(serializers.Serializer):
+    """Serializer for approving/rejecting grant applications"""
+    action = serializers.ChoiceField(choices=['approve', 'reject'])
+    admin_notes = serializers.CharField(required=False, allow_blank=True)
+    rejection_reason = serializers.CharField(required=False, allow_blank=True)
+    
+    def validate(self, data):
+        if data['action'] == 'reject' and not data.get('rejection_reason'):
+            raise serializers.ValidationError({
+                'rejection_reason': 'Rejection reason is required when rejecting'
+            })
+        return data

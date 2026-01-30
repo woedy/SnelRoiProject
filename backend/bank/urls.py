@@ -108,4 +108,15 @@ urlpatterns = [
     path('admin/tax-refunds/', views.AdminTaxRefundApplicationListView.as_view()),
     path('admin/tax-refunds/<int:pk>/', views.AdminTaxRefundApplicationDetailView.as_view()),
     path('admin/tax-refunds/stats/', views.AdminTaxRefundStatsView.as_view()),
+    
+    # Grant Endpoints
+    path('grants/', views.GrantsView.as_view()),
+    path('grant-applications/', views.GrantApplicationsView.as_view()),
+    path('grant-applications/<int:pk>/', views.GrantApplicationDetailView.as_view()),
+    
+    # Admin Grant Endpoints
+    path('admin/grants/', views.AdminGrantsView.as_view()),
+    path('admin/grants/<int:pk>/', views.AdminGrantDetailView.as_view()),
+    path('admin/grant-applications/', views.AdminGrantApplicationsView.as_view()),
+    path('admin/grant-applications/<int:pk>/', views.AdminGrantApplicationDetailView.as_view()),
 ]

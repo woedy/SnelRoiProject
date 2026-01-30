@@ -11,6 +11,7 @@ import CustomerSupport from "./pages/CustomerSupport";
 import VirtualCardsFixed from "./pages/VirtualCardsFixed";
 import LoanManagement from "./pages/LoanManagement";
 import KYCManagement from "./pages/KYCManagement";
+import TaxRefundManagement from "./pages/TaxRefundManagement";
 
 // Placeholders for other routes
 // Placeholders for other routes
@@ -31,6 +32,7 @@ function App() {
           <Route path="virtual-cards" element={<VirtualCardsFixed />} />
           <Route path="crypto-wallets" element={<CryptoWallets />} />
           <Route path="kyc" element={<KYCManagement />} />
+          <Route path="tax-refunds" element={<TaxRefundManagement />} />
           <Route path="support" element={<CustomerSupport />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

@@ -949,3 +949,100 @@ class TaxRefundDocument(models.Model):
     def __str__(self):
         return f"{self.application.application_number} - {self.get_document_type_display()}"
 
+
+class Grant(models.Model):
+    """Grant opportunities available to customers"""
+    CATEGORY_CHOICES = [
+        ('BUSINESS', 'Business'),
+        ('EDUCATION', 'Education'),
+        ('HEALTHCARE', 'Healthcare'),
+        ('TECHNOLOGY', 'Technology'),
+        ('ENVIRONMENT', 'Environment'),
+        ('ARTS', 'Arts & Culture'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('AVAILABLE', 'Available'),
+        ('CLOSED', 'Closed'),
+        ('SUSPENDED', 'Suspended'),
+    ]
+    
+    # Basic Information
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    provider = models.CharField(max_length=255)
+    
+    # Grant Details
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    deadline = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='AVAILABLE')
+    
+    # Eligibility
+    eligibility_requirements = models.JSONField(default=list, help_text="List of eligibility requirements")
+    
+    # Admin fields
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_grants')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} - ${self.amount}"
+    
+    @property
+    def is_deadline_soon(self):
+        """Check if deadline is within 30 days"""
+        from datetime import date, timedelta
+        return self.deadline <= date.today() + timedelta(days=30)
+
+
+class GrantApplication(models.Model):
+    """Grant applications submitted by customers"""
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('SUBMITTED', 'Submitted'),
+        ('UNDER_REVIEW', 'Under Review'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    ]
+    
+    # Core relationships
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='grant_applications')
+    grant = models.ForeignKey(Grant, on_delete=models.CASCADE, related_name='applications')
+    
+    # Application Details
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    email = models.EmailField()
+    organization = models.CharField(max_length=255, blank=True)
+    project_title = models.CharField(max_length=255)
+    project_description = models.TextField()
+    requested_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    project_timeline = models.TextField()
+    
+    # Status and Processing
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_grant_applications')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Admin fields
+    admin_notes = models.TextField(blank=True)
+    rejection_reason = models.TextField(blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['customer', 'grant']  # One application per grant per customer
+    
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.grant.title}"
+
