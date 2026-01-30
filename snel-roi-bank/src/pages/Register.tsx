@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Logo } from '@/components/Logo';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
-import { ProgressIndicator } from '@/components/ui/progress-indicator';
+import { StepProgressIndicator } from '@/components/ui/progress-indicator';
 import { Eye, EyeOff, ArrowRight, ArrowLeft, Check, User, Mail, CreditCard, Shield } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -458,7 +458,7 @@ const Register = () => {
               <span>Create Account</span>
               <span>Step {currentStep} of 4</span>
             </div>
-            <ProgressIndicator steps={steps} currentStep={currentStep} />
+            <StepProgressIndicator steps={steps} currentStep={currentStep} />
           </div>
 
           {/* Step Content */}
