@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, CreditCard, DollarSign, Activity, Loader2, MessageSquare } from "lucide-react";
+import { Users, CreditCard, DollarSign, Activity, MessageSquare } from "lucide-react";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 import { userService } from "@/services/userService";
 import { transactionService } from "@/services/transactionService";
 import { accountService } from "@/services/accountService";
@@ -52,7 +53,7 @@ export default function Dashboard() {
   }, []);
 
   if (isLoading) {
-    return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return <LoadingScreen message="Loading admin dashboard..." />;
   }
 
   return (

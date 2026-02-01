@@ -3,6 +3,7 @@ import { apiRequest } from '@/lib/api';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  isLoading: boolean;
   user: { 
     id: number; 
     email: string; 
@@ -29,6 +30,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return Boolean(localStorage.getItem('snel-roi-token'));
   });
   const [user, setUser] = useState<AuthContextType['user']>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const handleAuthError = () => {
     setIsAuthenticated(false);
@@ -40,16 +42,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (email: string, password: string) => {
-    const data = await apiRequest<{ access: string; refresh: string }>('/auth/login/', {
-      method: 'POST',
-      auth: false,
-      body: JSON.stringify({ email, password }),
-    });
-    localStorage.setItem('snel-roi-token', data.access);
-    localStorage.setItem('snel-roi-refresh-token', data.refresh);
-    const me = await apiRequest<AuthContextType['user']>('/me/');
-    setUser(me);
-    setIsAuthenticated(true);
+    setIsLoading(true);
+    try {
+      const data = await apiRequest<{ access: string; refresh: string }>('/auth/login/', {
+        method: 'POST',
+        auth: false,
+        body: JSON.stringify({ email, password }),
+      });
+      localStorage.setItem('snel-roi-token', data.access);
+      localStorage.setItem('snel-roi-refresh-token', data.refresh);
+      const me = await apiRequest<AuthContextType['user']>('/me/');
+      setUser(me);
+      setIsAuthenticated(true);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const register = async (email: string, password: string, fullName: string) => {
@@ -121,12 +128,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               error.message.includes('Token')) {
             handleAuthError();
           }
+        })
+        .finally(() => {
+          setIsLoading(false);
         });
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, register, verifyEmail, resendVerification, requestPasswordReset, confirmPasswordReset, logout, handleAuthError }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, user, login, register, verifyEmail, resendVerification, requestPasswordReset, confirmPasswordReset, logout, handleAuthError }}>
       {children}
     </AuthContext.Provider>
   );

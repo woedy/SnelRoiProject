@@ -165,6 +165,9 @@ else:
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', os.environ.get('EMAIL_HOST_USER', 'no-reply@snelroi.local'))
 
+# Frontend URL for email links
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+
 # Logging Configuration
 LOGGING = {
     'version': 1,

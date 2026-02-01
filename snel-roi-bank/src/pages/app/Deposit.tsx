@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Receipt } from '@/components/Receipt';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { InlineLoader } from '@/components/ui/loading-screen';
 import { apiRequest, getErrorMessage } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { Building2, CreditCard, Smartphone, ChevronRight, ArrowLeft, Bitcoin, DollarSign, Wallet, Copy, Check, Upload, Info, ExternalLink, Lock } from 'lucide-react';

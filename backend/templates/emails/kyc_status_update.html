@@ -1,0 +1,98 @@
+{% extends "emails/base.html" %}
+
+{% block title %}KYC Verification Update{% endblock %}
+
+{% block content %}
+<div style="background-color: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+    <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1f2937; font-size: 28px; font-weight: bold; margin: 0;">
+            KYC Verification Update
+        </h1>
+    </div>
+
+    <div style="margin-bottom: 30px;">
+        <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hello {{ customer_name }},
+        </p>
+
+        {% if status == 'VERIFIED' %}
+        <div style="background-color: #d1fae5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 20px; margin-bottom: 20px;">
+            <h2 style="color: #065f46; font-size: 20px; font-weight: bold; margin: 0 0 10px 0;">
+                ✅ KYC Verification Approved
+            </h2>
+            <p style="color: #047857; font-size: 16px; line-height: 1.6; margin: 0;">
+                Congratulations! Your identity verification has been successfully completed. You now have full access to all banking features and services.
+            </p>
+        </div>
+        {% elif status == 'REJECTED' %}
+        <div style="background-color: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; padding: 20px; margin-bottom: 20px;">
+            <h2 style="color: #991b1b; font-size: 20px; font-weight: bold; margin: 0 0 10px 0;">
+                ❌ KYC Verification Rejected
+            </h2>
+            <p style="color: #dc2626; font-size: 16px; line-height: 1.6; margin: 0 0 15px 0;">
+                Unfortunately, we were unable to verify your identity with the documents provided.
+            </p>
+            {% if rejection_reason %}
+            <div style="background-color: #ffffff; border-left: 4px solid #dc2626; padding: 15px; margin-bottom: 15px;">
+                <p style="color: #374151; font-size: 14px; font-weight: bold; margin: 0 0 5px 0;">Reason:</p>
+                <p style="color: #6b7280; font-size: 14px; line-height: 1.5; margin: 0;">{{ rejection_reason }}</p>
+            </div>
+            {% endif %}
+            <p style="color: #dc2626; font-size: 16px; line-height: 1.6; margin: 0;">
+                Please update your documents and resubmit for verification.
+            </p>
+        </div>
+        {% elif status == 'UNDER_REVIEW' %}
+        <div style="background-color: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 20px; margin-bottom: 20px;">
+            <h2 style="color: #1e40af; font-size: 20px; font-weight: bold; margin: 0 0 10px 0;">
+                🔍 KYC Under Review
+            </h2>
+            <p style="color: #1d4ed8; font-size: 16px; line-height: 1.6; margin: 0;">
+                Thank you for submitting your KYC documents. Our team is currently reviewing your information. This process typically takes 1-3 business days.
+            </p>
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 30px;">
+            <h3 style="color: #1f2937; font-size: 18px; font-weight: bold; margin: 0 0 15px 0;">
+                What's Next?
+            </h3>
+            
+            {% if status == 'VERIFIED' %}
+            <ul style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">You can now access all banking features</li>
+                <li style="margin-bottom: 8px;">Higher transaction limits are now available</li>
+                <li style="margin-bottom: 8px;">Apply for premium services and products</li>
+            </ul>
+            {% elif status == 'REJECTED' %}
+            <ul style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">Review the rejection reason above</li>
+                <li style="margin-bottom: 8px;">Update your profile information if needed</li>
+                <li style="margin-bottom: 8px;">Upload new, clear documents</li>
+                <li style="margin-bottom: 8px;">Resubmit for verification</li>
+            </ul>
+            {% elif status == 'UNDER_REVIEW' %}
+            <ul style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">We'll review your documents within 1-3 business days</li>
+                <li style="margin-bottom: 8px;">You'll receive an email once the review is complete</li>
+                <li style="margin-bottom: 8px;">No further action is required from you at this time</li>
+            </ul>
+            {% endif %}
+        </div>
+
+        <div style="text-align: center; margin-top: 40px;">
+            <a href="{{ dashboard_url }}" 
+               style="background-color: #3b82f6; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; display: inline-block;">
+                View Your Profile
+            </a>
+        </div>
+    </div>
+
+    <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 30px;">
+        <p style="color: #6b7280; font-size: 14px; line-height: 1.5; margin: 0;">
+            If you have any questions about your KYC verification, please contact our support team at 
+            <a href="mailto:banking@snelroi.com" style="color: #3b82f6; text-decoration: none;">banking@snelroi.com</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { authService } from "@/services/authService";
 import { Logo } from "@/components/Logo";
-import { Loader2 } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -59,7 +59,7 @@ export default function Login() {
           </CardContent>
           <CardFooter>
             <Button className="w-full" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading && <LoadingSpinner size="sm" className="mr-2" />}
               Sign in
             </Button>
           </CardFooter>

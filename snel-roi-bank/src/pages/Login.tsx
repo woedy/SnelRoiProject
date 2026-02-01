@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Logo } from '@/components/Logo';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
 import { Eye, EyeOff, ArrowRight } from 'lucide-react';
@@ -12,14 +13,16 @@ import { toast } from '@/hooks/use-toast';
 
 const Login = () => {
   const { t } = useLanguage();
-  const { login } = useAuth();
+  const { login, isLoading } = useAuth();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       await login(email, password);
       toast({
@@ -44,6 +47,8 @@ const Login = () => {
         description: message,
         variant: 'destructive',
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -107,9 +112,18 @@ const Login = () => {
               </div>
             </div>
 
-            <Button type="submit" size="lg" className="w-full">
-              {t('auth.login')}
-              <ArrowRight className="ml-2 h-4 w-4" />
+            <Button type="submit" size="lg" className="w-full" disabled={isSubmitting || isLoading}>
+              {isSubmitting || isLoading ? (
+                <>
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  {t('auth.login')}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
           </form>
 
