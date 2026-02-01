@@ -257,6 +257,41 @@ def send_transaction_status_email(entry_id, status):
         print(f"LedgerEntry {entry_id} not found for status email")
 
 
+def send_kyc_status_email(profile, status, rejection_reason=None):
+    """Send KYC status update email to customer."""
+    user = profile.user
+    
+    if status == 'VERIFIED':
+        subject = 'KYC Verification Approved - Welcome to SnelROI!'
+    elif status == 'REJECTED':
+        subject = 'KYC Verification Update Required'
+    elif status == 'UNDER_REVIEW':
+        subject = 'KYC Documents Under Review'
+    else:
+        subject = 'KYC Status Update'
+    
+    context = {
+        'user': user,
+        'customer_name': profile.full_name or f"{user.first_name} {user.last_name}",
+        'status': status,
+        'rejection_reason': rejection_reason,
+        'dashboard_url': f"{settings.FRONTEND_URL}/app/profile" if hasattr(settings, 'FRONTEND_URL') else '#',
+    }
+    
+    html_message = render_to_string('emails/kyc_status_update.html', context)
+    plain_message = strip_tags(html_message)
+    
+    print(f"Sending KYC {status} email to {user.email}")
+    send_mail(
+        subject,
+        plain_message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+        html_message=html_message
+    )
+
+
 def send_account_verification_email(user):
     """Notify user that their account has been verified."""
     subject = 'Account Verified - Welcome to SnelROI!'

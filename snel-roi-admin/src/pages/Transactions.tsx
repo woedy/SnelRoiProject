@@ -9,8 +9,10 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingScreen, InlineLoader } from "@/components/ui/loading-screen";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { transactionService, Transaction } from "@/services/transactionService";
-import { Loader2, Check, X, Trash2 } from "lucide-react";
+import { Check, X, Trash2 } from "lucide-react";
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -77,7 +79,7 @@ export default function Transactions() {
   };
 
   if (isLoading) {
-    return <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return <LoadingScreen message="Loading transactions..." />;
   }
 
   return (
@@ -93,7 +95,7 @@ export default function Transactions() {
           onClick={handleClearAll}
           disabled={isClearing}
         >
-          {isClearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          {isClearing ? <LoadingSpinner size="sm" /> : <Trash2 className="h-4 w-4" />}
           Clear Transaction History
         </Button>
       </div>
@@ -138,10 +140,10 @@ export default function Transactions() {
                     {tx.status === 'PENDING' && (
                       <div className="flex gap-2">
                          <Button size="sm" variant="outline" className="h-8 border-green-500/20 text-green-500 hover:bg-green-500/10 hover:text-green-600" onClick={() => handleApprove(tx.id)} disabled={actionLoading === tx.id}>
-                           {actionLoading === tx.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                           {actionLoading === tx.id ? <LoadingSpinner size="sm" /> : <Check className="h-4 w-4" />}
                          </Button>
                          <Button size="sm" variant="outline" className="h-8 border-red-500/20 text-red-500 hover:bg-red-500/10 hover:text-red-600" onClick={() => handleDecline(tx.id)} disabled={actionLoading === tx.id}>
-                           {actionLoading === tx.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                           {actionLoading === tx.id ? <LoadingSpinner size="sm" /> : <X className="h-4 w-4" />}
                          </Button>
                       </div>
                     )}

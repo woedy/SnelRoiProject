@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Receipt } from '@/components/Receipt';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { InlineLoader } from '@/components/ui/loading-screen';
 import { apiRequest } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { UserPlus, ChevronRight, ArrowLeft, Check, ExternalLink } from 'lucide-react';
@@ -28,9 +30,13 @@ const Transfer = () => {
   const [note, setNote] = useState('');
   const [reference, setReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoadingBeneficiaries, setIsLoadingBeneficiaries] = useState(true);
 
   useEffect(() => {
-    apiRequest<Beneficiary[]>('/beneficiaries/').then(setBeneficiaries).catch(() => setBeneficiaries([]));
+    apiRequest<Beneficiary[]>('/beneficiaries/')
+      .then(setBeneficiaries)
+      .catch(() => setBeneficiaries([]))
+      .finally(() => setIsLoadingBeneficiaries(false));
   }, []);
 
   const handleBeneficiarySelect = (id: string) => {
@@ -121,22 +127,30 @@ const Transfer = () => {
               {t('transfer.savedBeneficiaries')}
             </h3>
             <div className="space-y-2">
-              {beneficiaries.map((beneficiary) => (
-                <button
-                  key={beneficiary.id}
-                  onClick={() => handleBeneficiarySelect(beneficiary.id.toString())}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl bg-card shadow-card hover:shadow-lg transition-all hover:-translate-y-0.5"
-                >
-                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
-                    {beneficiary.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-semibold text-foreground">{beneficiary.name}</p>
-                    <p className="text-sm text-muted-foreground">{beneficiary.bank_label}</p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </button>
-              ))}
+              {isLoadingBeneficiaries ? (
+                <InlineLoader message="Loading saved recipients..." />
+              ) : beneficiaries.length > 0 ? (
+                beneficiaries.map((beneficiary) => (
+                  <button
+                    key={beneficiary.id}
+                    onClick={() => handleBeneficiarySelect(beneficiary.id.toString())}
+                    className="w-full flex items-center gap-4 p-4 rounded-xl bg-card shadow-card hover:shadow-lg transition-all hover:-translate-y-0.5"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
+                      {beneficiary.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="text-left flex-1">
+                      <p className="font-semibold text-foreground">{beneficiary.name}</p>
+                      <p className="text-sm text-muted-foreground">{beneficiary.bank_label}</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No saved recipients yet</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -273,7 +287,7 @@ const Transfer = () => {
           <Button size="lg" className="w-full" onClick={handleConfirm} disabled={isProcessing}>
             {isProcessing ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent mr-2" />
+                <LoadingSpinner size="sm" className="mr-2" />
                 {t('common.processing')}
               </>
             ) : (

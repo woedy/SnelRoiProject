@@ -4,11 +4,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LanguageProvider } from "@/context/LanguageContext";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { PublicLayout } from "@/layouts/PublicLayout";
 import { AppLayout } from "@/layouts/AppLayout";
+import { PageLoader } from "@/components/ui/page-loader";
 import { useEffect } from "react";
 
 // Public Pages
@@ -77,6 +78,61 @@ const ConditionalThemeProvider = ({ children }: { children: React.ReactNode }) =
   return <>{children}</>;
 };
 
+// Main app routes component with auth loading check
+const AppRoutes = () => {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return <PageLoader message="Initializing your banking session..." />;
+  }
+
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/" element={<PublicLayout><Index /></PublicLayout>} />
+      <Route path="/features" element={<PublicLayout><Features /></PublicLayout>} />
+      <Route path="/features/dashboard" element={<PublicLayout><DashboardFeature /></PublicLayout>} />
+      <Route path="/features/transfers" element={<PublicLayout><TransfersFeature /></PublicLayout>} />
+      <Route path="/features/savings" element={<PublicLayout><SavingsFeature /></PublicLayout>} />
+      <Route path="/features/security" element={<PublicLayout><SecurityFeature /></PublicLayout>} />
+      <Route path="/features/statements" element={<PublicLayout><StatementsFeature /></PublicLayout>} />
+      <Route path="/features/multilang" element={<PublicLayout><MultilangFeature /></PublicLayout>} />
+      <Route path="/features/mobile" element={<PublicLayout><MobileFeature /></PublicLayout>} />
+      <Route path="/features/global" element={<PublicLayout><GlobalFeature /></PublicLayout>} />
+      <Route path="/features/virtual-cards" element={<PublicLayout><VirtualCardsFeature /></PublicLayout>} />
+      <Route path="/security" element={<PublicLayout><Security /></PublicLayout>} />
+      <Route path="/faq" element={<PublicLayout><FAQ /></PublicLayout>} />
+      <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* App Routes */}
+      <Route path="/app/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
+      <Route path="/app/deposit" element={<AppLayout><Deposit /></AppLayout>} />
+      <Route path="/app/transfer" element={<AppLayout><Transfer /></AppLayout>} />
+      <Route path="/app/external-transfer" element={<AppLayout><ExternalTransfer /></AppLayout>} />
+      <Route path="/app/withdraw" element={<AppLayout><Withdraw /></AppLayout>} />
+      <Route path="/app/loans" element={<AppLayout><Loans /></AppLayout>} />
+      <Route path="/app/loans/apply" element={<AppLayout><LoanApplication /></AppLayout>} />
+      <Route path="/app/loans/:id" element={<AppLayout><LoanDetail /></AppLayout>} />
+      <Route path="/app/grants" element={<AppLayout><Grants /></AppLayout>} />
+      <Route path="/app/tax-refund" element={<AppLayout><TaxRefund /></AppLayout>} />
+      <Route path="/app/virtual-cards" element={<AppLayout><VirtualCards /></AppLayout>} />
+      <Route path="/app/statements" element={<AppLayout><Statements /></AppLayout>} />
+      <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />
+      <Route path="/app/notifications" element={<AppLayout><Notifications /></AppLayout>} />
+      <Route path="/app/profile" element={<AppLayout><Profile /></AppLayout>} />
+      <Route path="/app/settings" element={<AppLayout><Settings /></AppLayout>} />
+      <Route path="/app/help" element={<AppLayout><Help /></AppLayout>} />
+
+      {/* 404 */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
@@ -88,49 +144,7 @@ const App = () => (
             <BrowserRouter>
               <ScrollToTop />
               <ConditionalThemeProvider>
-                <Routes>
-                  {/* Public Routes */}
-                  <Route path="/" element={<PublicLayout><Index /></PublicLayout>} />
-                  <Route path="/features" element={<PublicLayout><Features /></PublicLayout>} />
-                  <Route path="/features/dashboard" element={<PublicLayout><DashboardFeature /></PublicLayout>} />
-                  <Route path="/features/transfers" element={<PublicLayout><TransfersFeature /></PublicLayout>} />
-                  <Route path="/features/savings" element={<PublicLayout><SavingsFeature /></PublicLayout>} />
-                  <Route path="/features/security" element={<PublicLayout><SecurityFeature /></PublicLayout>} />
-                  <Route path="/features/statements" element={<PublicLayout><StatementsFeature /></PublicLayout>} />
-                  <Route path="/features/multilang" element={<PublicLayout><MultilangFeature /></PublicLayout>} />
-                  <Route path="/features/mobile" element={<PublicLayout><MobileFeature /></PublicLayout>} />
-                  <Route path="/features/global" element={<PublicLayout><GlobalFeature /></PublicLayout>} />
-                  <Route path="/features/virtual-cards" element={<PublicLayout><VirtualCardsFeature /></PublicLayout>} />
-                  <Route path="/security" element={<PublicLayout><Security /></PublicLayout>} />
-                  <Route path="/faq" element={<PublicLayout><FAQ /></PublicLayout>} />
-                  <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/verify-email" element={<VerifyEmail />} />
-                  <Route path="/reset-password" element={<ResetPassword />} />
-
-                  {/* App Routes */}
-                  <Route path="/app/dashboard" element={<AppLayout><Dashboard /></AppLayout>} />
-                  <Route path="/app/deposit" element={<AppLayout><Deposit /></AppLayout>} />
-                  <Route path="/app/transfer" element={<AppLayout><Transfer /></AppLayout>} />
-                  <Route path="/app/external-transfer" element={<AppLayout><ExternalTransfer /></AppLayout>} />
-                  <Route path="/app/withdraw" element={<AppLayout><Withdraw /></AppLayout>} />
-                  <Route path="/app/loans" element={<AppLayout><Loans /></AppLayout>} />
-                  <Route path="/app/loans/apply" element={<AppLayout><LoanApplication /></AppLayout>} />
-                  <Route path="/app/loans/:id" element={<AppLayout><LoanDetail /></AppLayout>} />
-                  <Route path="/app/grants" element={<AppLayout><Grants /></AppLayout>} />
-                  <Route path="/app/tax-refund" element={<AppLayout><TaxRefund /></AppLayout>} />
-                  <Route path="/app/virtual-cards" element={<AppLayout><VirtualCards /></AppLayout>} />
-                  <Route path="/app/statements" element={<AppLayout><Statements /></AppLayout>} />
-                  <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />
-                  <Route path="/app/notifications" element={<AppLayout><Notifications /></AppLayout>} />
-                  <Route path="/app/profile" element={<AppLayout><Profile /></AppLayout>} />
-                  <Route path="/app/settings" element={<AppLayout><Settings /></AppLayout>} />
-                  <Route path="/app/help" element={<AppLayout><Help /></AppLayout>} />
-
-                  {/* 404 */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
+                <AppRoutes />
               </ConditionalThemeProvider>
             </BrowserRouter>
           </TooltipProvider>

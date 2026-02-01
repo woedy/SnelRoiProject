@@ -297,7 +297,34 @@ class DashboardView(APIView):
                 'is_frozen': primary_card.status == 'FROZEN',
             }
         
+        # KYC Status for dashboard alert
+        kyc_status_data = None
+        if profile.kyc_status != 'VERIFIED':
+            kyc_status_data = {
+                'status': profile.kyc_status,
+                'profile_completion_percentage': profile.profile_completion_percentage,
+                'rejection_reason': profile.kyc_rejection_reason if profile.kyc_status == 'REJECTED' else None,
+            }
+        
+        # Calculate balances properly
         total_balance = sum([account.balance() for account in accounts_qs])
+        
+        # Calculate available balance (POSTED transactions only)
+        available_balance = total_balance  # This is already calculated from POSTED transactions only
+        
+        # Calculate pending balance (PENDING transactions)
+        pending_postings = LedgerPosting.objects.filter(
+            entry__status='PENDING',
+            account__customer=profile,
+        ).aggregate(
+            pending_debits=Sum('amount', filter=Q(direction='DEBIT')),
+            pending_credits=Sum('amount', filter=Q(direction='CREDIT')),
+        )
+        
+        pending_credits = pending_postings['pending_credits'] or 0
+        pending_debits = pending_postings['pending_debits'] or 0
+        pending_balance = pending_credits - pending_debits
+        
         last_30_days = timezone.now() - timedelta(days=30)
         summary = LedgerPosting.objects.filter(
             entry__created_at__gte=last_30_days,
@@ -311,11 +338,14 @@ class DashboardView(APIView):
             'recent_transactions': LedgerEntrySerializer(entries, many=True).data,
             'unsettled_crypto_deposits': CryptoDepositSerializer(unsettled_crypto, many=True).data,
             'total_balance': total_balance,
+            'available_balance': available_balance,
+            'pending_balance': pending_balance,
             'account_status': {
                 'has_frozen_account': has_frozen_account,
                 'frozen_account_numbers': frozen_account_numbers,
                 'message': f"Account Frozen: Your account {frozen_account_numbers[0]} has been frozen. Please contact customer care at banking@snelroi.com to resolve this issue." if has_frozen_account else None
             },
+            'kyc_status': kyc_status_data,
             'insights': {
                 'debits_last_30_days': summary['debits'] or 0,
                 'credits_last_30_days': summary['credits'] or 0,
@@ -1608,6 +1638,19 @@ class KYCSubmitView(APIView):
         profile.kyc_submitted_at = timezone.now()
         profile.save(update_fields=['kyc_status', 'kyc_submitted_at'])
         
+        # Send email notification
+        from .emails import send_kyc_status_email
+        send_kyc_status_email(profile, 'UNDER_REVIEW')
+        
+        # Create notification
+        from .services import create_notification
+        create_notification(
+            profile,
+            'KYC',  # notification_type
+            'KYC Documents Submitted',  # title
+            'Your KYC documents have been submitted for review. We will notify you once the review is complete.'  # message
+        )
+        
         return Response({
             'detail': 'KYC submitted successfully for review',
             'kyc_status': profile.kyc_status
@@ -1770,9 +1813,9 @@ class AdminKYCProfileDetailView(APIView):
             profile.kyc_verified_by = request.user
             profile.kyc_rejection_reason = ''
             
-            # Send verification email
-            from .emails import send_account_verification_email
-            send_account_verification_email(profile.user)
+            # Send KYC verification email
+            from .emails import send_kyc_status_email
+            send_kyc_status_email(profile, 'VERIFIED')
             
         elif action == 'reject':
             rejection_reason = request.data.get('rejection_reason', '')
@@ -1785,9 +1828,9 @@ class AdminKYCProfileDetailView(APIView):
             profile.kyc_verified_at = None
             profile.kyc_verified_by = None
             
-            # Send rejection email
-            from .emails import send_account_rejection_email
-            send_account_rejection_email(profile.user, rejection_reason)
+            # Send KYC rejection email
+            from .emails import send_kyc_status_email
+            send_kyc_status_email(profile, 'REJECTED', rejection_reason)
         
         profile.save()
         
@@ -1796,16 +1839,16 @@ class AdminKYCProfileDetailView(APIView):
         if action == 'verify':
             create_notification(
                 profile,
-                'Account Verified',
-                'Your account has been successfully verified. You now have full access to all banking features.',
-                'success'
+                'KYC',  # notification_type
+                'KYC Verification Approved',  # title
+                'Your identity verification has been successfully completed. You now have full access to all banking features.'  # message
             )
         else:
             create_notification(
                 profile,
-                'Account Verification Rejected',
-                f'Your account verification was rejected. Reason: {rejection_reason}',
-                'error'
+                'KYC',  # notification_type
+                'KYC Verification Rejected',  # title
+                f'Your KYC verification was rejected. Reason: {rejection_reason}'  # message
             )
         
         serializer = ProfileSerializer(profile, context={'request': request})

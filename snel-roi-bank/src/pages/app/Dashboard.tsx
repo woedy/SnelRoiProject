@@ -6,6 +6,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { TransactionIcon } from '@/components/TransactionIcon';
 import { StatusBadge } from '@/components/StatusBadge';
+import { LoadingScreen, InlineLoader } from '@/components/ui/loading-screen';
 import { apiRequest } from '@/lib/api';
 import {
   ArrowDownToLine,
@@ -19,6 +20,8 @@ import {
   EyeOff,
   Snowflake,
   Plus,
+  Shield,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface Account {
@@ -55,12 +58,24 @@ interface DashboardData {
   recent_transactions: Transaction[];
   unsettled_crypto_deposits?: PendingCryptoDeposit[];
   total_balance: number;
+  available_balance: number;
+  pending_balance: number;
   insights: { debits_last_30_days: number; credits_last_30_days: number };
-  virtual_card: { status: string; last_four: string };
+  virtual_card: { 
+    status: string; 
+    last_four: string;
+    card_type?: string;
+    is_frozen?: boolean;
+  } | null;
   account_status?: {
     has_frozen_account: boolean;
     frozen_account_numbers: string[];
     message: string | null;
+  };
+  kyc_status?: {
+    status: 'PENDING' | 'UNDER_REVIEW' | 'VERIFIED' | 'REJECTED';
+    profile_completion_percentage: number;
+    rejection_reason?: string;
   };
 }
 
@@ -78,8 +93,8 @@ const Dashboard = () => {
   }, []);
 
   const totalBalance = dashboard?.total_balance ?? 0;
-  const totalAvailable = dashboard?.total_balance ?? 0;
-  const pendingAmount = totalBalance - totalAvailable;
+  const availableBalance = dashboard?.available_balance ?? 0;
+  const pendingBalance = dashboard?.pending_balance ?? 0;
 
   const recentTransactions = dashboard?.recent_transactions ?? [];
 
@@ -111,11 +126,75 @@ const Dashboard = () => {
   };
 
   if (loading) {
-    return <p className="text-muted-foreground">Loading dashboard...</p>;
+    return <LoadingScreen message="Loading your dashboard..." />;
   }
 
   return (
     <div className="space-y-6 lg:space-y-8 pb-20 lg:pb-0">
+      {/* KYC Verification Alert */}
+      {dashboard?.kyc_status && dashboard.kyc_status.status !== 'VERIFIED' && (
+        <div className={`border rounded-xl p-4 mb-6 ${
+          dashboard.kyc_status.status === 'REJECTED' 
+            ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+            : 'bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+              dashboard.kyc_status.status === 'REJECTED' 
+                ? 'bg-red-500' 
+                : 'bg-amber-500'
+            }`}>
+              {dashboard.kyc_status.status === 'REJECTED' ? (
+                <span className="text-white text-xs font-bold">!</span>
+              ) : (
+                <Shield className="h-3 w-3 text-white" />
+              )}
+            </div>
+            <div className="flex-1">
+              <h3 className={`font-semibold mb-1 ${
+                dashboard.kyc_status.status === 'REJECTED'
+                  ? 'text-red-900 dark:text-red-100'
+                  : 'text-amber-900 dark:text-amber-100'
+              }`}>
+                {dashboard.kyc_status.status === 'REJECTED' 
+                  ? 'KYC Verification Rejected'
+                  : dashboard.kyc_status.status === 'UNDER_REVIEW'
+                  ? 'KYC Under Review'
+                  : 'Complete Your KYC Verification'
+                }
+              </h3>
+              <p className={`text-sm mb-3 ${
+                dashboard.kyc_status.status === 'REJECTED'
+                  ? 'text-red-700 dark:text-red-300'
+                  : 'text-amber-700 dark:text-amber-300'
+              }`}>
+                {dashboard.kyc_status.status === 'REJECTED' 
+                  ? `Your KYC verification was rejected. ${dashboard.kyc_status.rejection_reason || 'Please update your information and resubmit.'}`
+                  : dashboard.kyc_status.status === 'UNDER_REVIEW'
+                  ? 'Your KYC documents are being reviewed. This typically takes 1-3 business days.'
+                  : 'To access all banking features and increase your transaction limits, please complete your KYC verification by providing the required documents.'
+                }
+              </p>
+              {dashboard.kyc_status.status !== 'UNDER_REVIEW' && (
+                <Link to="/app/profile">
+                  <Button 
+                    size="sm" 
+                    className={
+                      dashboard.kyc_status.status === 'REJECTED'
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-amber-600 hover:bg-amber-700 text-white'
+                    }
+                  >
+                    <Shield className="h-4 w-4 mr-2" />
+                    {dashboard.kyc_status.status === 'REJECTED' ? 'Update KYC' : 'Complete KYC'}
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Frozen Account Alert */}
       {dashboard?.account_status?.has_frozen_account && (
         <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
@@ -159,7 +238,7 @@ const Dashboard = () => {
                   {t('dashboard.available')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ${Number(totalAvailable).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(availableBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div>
@@ -168,7 +247,7 @@ const Dashboard = () => {
                   {t('dashboard.pending')}
                 </div>
                 <p className="text-lg font-semibold">
-                  ${Number(pendingAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  ${Number(pendingBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -279,7 +358,7 @@ const Dashboard = () => {
               <div className={`rounded-2xl p-5 banking-card ${dashboard.virtual_card.is_frozen ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-sm opacity-70">{dashboard.virtual_card.card_type}</p>
+                    <p className="text-sm opacity-70">{dashboard.virtual_card.card_type || 'Standard'}</p>
                     <p className="mt-1 text-xl font-semibold tracking-wide">
                       {showCardDetails ? `**** **** **** ${dashboard.virtual_card.last_four}` : maskedPan(`0000 0000 0000 ${dashboard.virtual_card.last_four}`)}
                     </p>

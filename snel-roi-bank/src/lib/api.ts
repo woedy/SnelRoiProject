@@ -80,7 +80,11 @@ export const getErrorMessage = (errorBody: unknown): string => {
 export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {}): Promise<T> => {
   const token = localStorage.getItem('snel-roi-token');
   const headers = new Headers(options.headers);
-  headers.set('Content-Type', 'application/json');
+  
+  // Only set Content-Type to application/json if body is not FormData
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   const shouldSendAuth = options.auth ?? !isPublicAuthPath(path);
   if (!shouldSendAuth) {

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Receipt } from '@/components/Receipt';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { apiRequest } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { Building2, ChevronRight, ArrowLeft } from 'lucide-react';
@@ -121,7 +122,7 @@ const Withdraw = () => {
         <Button size="lg" className="w-full" onClick={handleConfirm} disabled={isProcessing}>
           {isProcessing ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent mr-2" />
+              <LoadingSpinner size="sm" className="mr-2" />
               {t('common.processing')}
             </>
           ) : (

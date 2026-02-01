@@ -78,7 +78,6 @@ export const kycService = {
     return apiRequest<KYCDocument>('/kyc/documents/', {
       method: 'POST',
       body: formData,
-      headers: {}, // Let browser set content-type for FormData
     });
   },
 
@@ -109,7 +108,7 @@ export const GENDER_OPTIONS = [
   { value: 'M', label: 'Male' },
   { value: 'F', label: 'Female' },
   { value: 'O', label: 'Other' },
-  { value: '', label: 'Prefer not to say' },
+  { value: 'N', label: 'Prefer not to say' },
 ];
 
 export const getKYCStatusColor = (status: string) => {
