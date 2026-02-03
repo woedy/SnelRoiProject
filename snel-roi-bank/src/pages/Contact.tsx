@@ -1,4 +1,4 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,7 +20,10 @@ const Contact = () => {
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h1 className="text-4xl md:text-5xl font-display font-bold text-primary mb-4">{t('contact.title')}</h1>
-          <p className="text-lg text-muted-foreground">{t('contact.subtitle')}</p>
+          <p className="text-lg text-muted-foreground mb-4">{t('contact.subtitle')}</p>
+          <p className="text-sm text-muted-foreground">
+            Have a quick question? Check our <Link to="/help" className="text-accent font-medium hover:underline">Help Center</Link> first.
+          </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 max-w-5xl mx-auto">

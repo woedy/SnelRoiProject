@@ -19,16 +19,16 @@ interface FormData {
   last_name: string;
   middle_name: string;
   username: string;
-  
+
   // Contact Information
   email: string;
   phone: string;
   country: string;
-  
+
   // Account Setup
   currency: string;
   account_type: string;
-  
+
   // Security
   password: string;
   confirm_password: string;
@@ -43,7 +43,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const [formData, setFormData] = useState<FormData>({
     first_name: '',
     last_name: '',
@@ -399,7 +399,7 @@ const Register = () => {
                 onCheckedChange={(checked) => handleChange('terms_accepted', checked as boolean)}
               />
               <Label htmlFor="terms" className="text-sm">
-                I agree to the Terms of Service and Privacy Policy
+                I agree to the <Link to="/terms" className="text-accent hover:underline">Terms of Service</Link> and <Link to="/privacy" className="text-accent hover:underline">Privacy Policy</Link>
               </Label>
             </div>
           </div>
@@ -480,7 +480,7 @@ const Register = () => {
                 Previous
               </Button>
             )}
-            
+
             <Button
               type="button"
               size="lg"

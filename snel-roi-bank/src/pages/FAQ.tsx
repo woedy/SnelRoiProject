@@ -1,4 +1,4 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useLanguage } from '@/context/LanguageContext';
 
@@ -18,7 +18,10 @@ const FAQ = () => {
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h1 className="text-4xl md:text-5xl font-display font-bold text-primary mb-4">{t('faq.title')}</h1>
-          <p className="text-lg text-muted-foreground">{t('faq.subtitle')}</p>
+          <p className="text-lg text-muted-foreground mb-4">{t('faq.subtitle')}</p>
+          <p className="text-sm text-muted-foreground">
+            Still have questions? Visit our <Link to="/help" className="text-accent font-medium hover:underline">Help Center</Link> for more articles.
+          </p>
         </div>
 
         <div className="max-w-3xl mx-auto">
