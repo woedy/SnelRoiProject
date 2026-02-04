@@ -135,7 +135,7 @@ const Login = () => {
           </p>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            {t('auth.terms')}
+            By continuing, you agree to our <Link to="/terms" className="text-accent hover:underline">Terms of Service</Link> and <Link to="/privacy" className="text-accent hover:underline">Privacy Policy</Link>
           </p>
         </div>
       </div>

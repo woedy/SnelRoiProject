@@ -36,11 +36,10 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`text-sm font-medium transition-colors hover:text-primary ${
-                    location.pathname === link.path
+                  className={`text-sm font-medium transition-colors hover:text-primary ${location.pathname === link.path
                       ? 'text-primary'
                       : 'text-muted-foreground'
-                  }`}
+                    }`}
                 >
                   {link.label}
                 </Link>
@@ -80,11 +79,10 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === link.path
+                  className={`block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${location.pathname === link.path
                       ? 'bg-secondary text-primary'
                       : 'text-muted-foreground hover:bg-secondary'
-                  }`}
+                    }`}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {link.label}
@@ -122,27 +120,27 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
             <div>
               <h4 className="font-semibold mb-4">{t('footer.company')}</h4>
               <ul className="space-y-2 text-sm text-primary-foreground/70">
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.about')}</Link></li>
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.careers')}</Link></li>
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.press')}</Link></li>
+                <li><Link to="/about" className="hover:text-primary-foreground">{t('footer.about')}</Link></li>
+                <li><Link to="/careers" className="hover:text-primary-foreground">{t('footer.careers')}</Link></li>
+                <li><Link to="/press" className="hover:text-primary-foreground">{t('footer.press')}</Link></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">{t('footer.legal')}</h4>
               <ul className="space-y-2 text-sm text-primary-foreground/70">
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.terms')}</Link></li>
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.privacy')}</Link></li>
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.cookies')}</Link></li>
+                <li><Link to="/terms" className="hover:text-primary-foreground">{t('footer.terms')}</Link></li>
+                <li><Link to="/privacy" className="hover:text-primary-foreground">{t('footer.privacy')}</Link></li>
+                <li><Link to="/cookies" className="hover:text-primary-foreground">{t('footer.cookies')}</Link></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4">{t('footer.support')}</h4>
               <ul className="space-y-2 text-sm text-primary-foreground/70">
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.help')}</Link></li>
+                <li><Link to="/help" className="hover:text-primary-foreground">{t('footer.help')}</Link></li>
                 <li><Link to="/contact" className="hover:text-primary-foreground">{t('footer.contactUs')}</Link></li>
-                <li><Link to="/" className="hover:text-primary-foreground">{t('footer.status')}</Link></li>
+                <li><Link to="/status" className="hover:text-primary-foreground">{t('footer.status')}</Link></li>
               </ul>
             </div>
           </div>

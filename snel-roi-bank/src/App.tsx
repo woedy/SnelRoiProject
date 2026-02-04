@@ -22,6 +22,14 @@ import Features from "./pages/Features";
 import Security from "./pages/Security";
 import FAQ from "./pages/FAQ";
 import Contact from "./pages/Contact";
+import AboutUs from "./pages/AboutUs";
+import Careers from "./pages/Careers";
+import Press from "./pages/Press";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import CookiePolicy from "./pages/CookiePolicy";
+import HelpCenter from "./pages/HelpCenter";
+import SystemStatus from "./pages/SystemStatus";
 import NotFound from "./pages/NotFound";
 
 // Feature Detail Pages
@@ -70,11 +78,11 @@ const ScrollToTop = () => {
 const ConditionalThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const isAppRoute = location.pathname.startsWith('/app/');
-  
+
   if (isAppRoute) {
     return <ThemeProvider>{children}</ThemeProvider>;
   }
-  
+
   return <>{children}</>;
 };
 
@@ -103,6 +111,14 @@ const AppRoutes = () => {
       <Route path="/security" element={<PublicLayout><Security /></PublicLayout>} />
       <Route path="/faq" element={<PublicLayout><FAQ /></PublicLayout>} />
       <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
+      <Route path="/about" element={<PublicLayout><AboutUs /></PublicLayout>} />
+      <Route path="/careers" element={<PublicLayout><Careers /></PublicLayout>} />
+      <Route path="/press" element={<PublicLayout><Press /></PublicLayout>} />
+      <Route path="/terms" element={<PublicLayout><TermsOfService /></PublicLayout>} />
+      <Route path="/privacy" element={<PublicLayout><PrivacyPolicy /></PublicLayout>} />
+      <Route path="/cookies" element={<PublicLayout><CookiePolicy /></PublicLayout>} />
+      <Route path="/help" element={<PublicLayout><HelpCenter /></PublicLayout>} />
+      <Route path="/status" element={<PublicLayout><SystemStatus /></PublicLayout>} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
