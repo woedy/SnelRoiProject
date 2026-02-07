@@ -8,12 +8,12 @@ const HelpCenter = () => {
     const { t } = useLanguage();
 
     const categories = [
-        { icon: HelpCircle, title: 'Getting Started', count: 12 },
-        { icon: Shield, title: 'Security & Privacy', count: 8 },
-        { icon: CreditCard, title: 'Cards & Payments', count: 15 },
-        { icon: Send, title: 'Transfers', count: 10 },
-        { icon: Book, title: 'Account Management', count: 14 },
-        { icon: MessageSquare, title: 'Support Tickets', count: 5 },
+        { icon: HelpCircle, title: t('help.cat.gettingStarted'), count: 12 },
+        { icon: Shield, title: t('help.cat.security'), count: 8 },
+        { icon: CreditCard, title: t('help.cat.cards'), count: 15 },
+        { icon: Send, title: t('help.cat.transfers'), count: 10 },
+        { icon: Book, title: t('help.cat.account'), count: 14 },
+        { icon: MessageSquare, title: t('help.cat.support'), count: 5 },
     ];
 
     const popularFaqs = [
@@ -29,12 +29,12 @@ const HelpCenter = () => {
             <div className="container mx-auto px-4 sm:px-6">
                 {/* Search Header */}
                 <div className="text-center mb-16">
-                    <h1 className="text-4xl md:text-5xl font-display font-bold text-primary mb-6">How can we help you?</h1>
+                    <h1 className="text-4xl md:text-5xl font-display font-bold text-primary mb-6">{t('help.title')}</h1>
                     <div className="max-w-2xl mx-auto relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
                             type="text"
-                            placeholder="Search for articles, guides..."
+                            placeholder={t('help.searchPlaceholder')}
                             className="pl-12 h-14 text-lg rounded-xl shadow-sm border-border"
                         />
                     </div>
@@ -56,7 +56,7 @@ const HelpCenter = () => {
                 {/* Popular Questions & Contact */}
                 <div className="grid lg:grid-cols-3 gap-12 items-start">
                     <div className="lg:col-span-2">
-                        <h2 className="text-2xl font-bold mb-6">Popular Questions</h2>
+                        <h2 className="text-2xl font-bold mb-6">{t('help.faq.title')}</h2>
                         <div className="space-y-4">
                             {popularFaqs.map((faq, i) => (
                                 <div key={i} className="p-4 rounded-xl border border-border hover:bg-muted/50 transition-colors cursor-pointer flex items-center justify-between">
@@ -68,14 +68,14 @@ const HelpCenter = () => {
                     </div>
 
                     <div className="bg-primary text-white p-8 rounded-2xl">
-                        <h2 className="text-2xl font-bold mb-4">Still need help?</h2>
-                        <p className="text-white/80 mb-8">Our support team is available 24/7 to assist you with any questions or concerns.</p>
+                        <h2 className="text-2xl font-bold mb-4">{t('help.contact.title')}</h2>
+                        <p className="text-white/80 mb-8">{t('help.contact.desc')}</p>
                         <div className="space-y-4">
                             <Button className="w-full bg-accent hover:bg-accent/90 text-white border-0 py-6 text-lg">
-                                Contact Us
+                                {t('help.contact.btn.contact')}
                             </Button>
                             <Button variant="outline" className="w-full border-white/30 text-white hover:bg-white/10 py-6 text-lg">
-                                Start Live Chat
+                                {t('help.contact.btn.chat')}
                             </Button>
                         </div>
                     </div>
