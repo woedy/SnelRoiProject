@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/Logo';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { LanguageSwitch } from '@/components/LanguageSwitch';
 
 const ResetPassword = () => {
   const { requestPasswordReset, confirmPasswordReset } = useAuth();
@@ -60,7 +61,10 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 relative">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitch />
+      </div>
       <div className="w-full max-w-md space-y-8">
         <Logo />
         <div>

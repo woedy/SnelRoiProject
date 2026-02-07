@@ -2,6 +2,7 @@ import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useLanguage } from '@/context/LanguageContext';
 import { Logo } from '@/components/Logo';
+import { LanguageSwitch } from '@/components/LanguageSwitch';
 
 const NotFound = () => {
   const location = useLocation();
@@ -12,7 +13,10 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted">
+    <div className="flex min-h-screen items-center justify-center bg-muted relative">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitch />
+      </div>
       <div className="text-center">
         <div className="flex justify-center mb-8">
           <Logo size="lg" />

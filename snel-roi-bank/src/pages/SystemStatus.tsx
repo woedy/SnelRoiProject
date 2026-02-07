@@ -1,14 +1,17 @@
 import React from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import { CheckCircle2, Clock, AlertCircle, ShieldCheck, Globe, Smartphone, CreditCard, Cpu } from 'lucide-react';
 
 const SystemStatus = () => {
+    const { t } = useLanguage();
+
     const services = [
-        { name: 'Core Banking Systems', status: 'Operational', icon: ShieldCheck, time: '100% uptime' },
-        { name: 'Mobile Applications (iOS/Android)', status: 'Operational', icon: Smartphone, time: '99.98% uptime' },
-        { name: 'Web Banking Platform', status: 'Operational', icon: Globe, time: '100% uptime' },
-        { name: 'Card Payments & Processing', status: 'Operational', icon: CreditCard, time: '99.95% uptime' },
-        { name: 'International Transfers (SWIFT)', status: 'Operational', icon: Clock, time: 'Last checked: 2 min ago' },
-        { name: 'Public API', status: 'Operational', icon: Cpu, time: '100% uptime' },
+        { name: t('status.service.core'), status: t('status.operational'), icon: ShieldCheck, time: t('status.uptime') },
+        { name: t('status.service.mobile'), status: t('status.operational'), icon: Smartphone, time: t('status.uptime.mobile') },
+        { name: t('status.service.web'), status: t('status.operational'), icon: Globe, time: t('status.uptime') },
+        { name: t('status.service.cards'), status: t('status.operational'), icon: CreditCard, time: t('status.uptime.cards') },
+        { name: t('status.service.swift'), status: t('status.operational'), icon: Clock, time: t('status.checked') },
+        { name: t('status.service.api'), status: t('status.operational'), icon: Cpu, time: t('status.uptime') },
     ];
 
     return (
@@ -17,10 +20,10 @@ const SystemStatus = () => {
                 <div className="text-center mb-16">
                     <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-500 rounded-full mb-6 font-semibold">
                         <CheckCircle2 className="h-5 w-5" />
-                        All Systems Operational
+                        {t('status.allOperational')}
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-display font-bold text-primary mb-4">System Status</h1>
-                    <p className="text-lg text-muted-foreground">Real-time status of Snel ROI Banking services and infrastructure.</p>
+                    <h1 className="text-4xl md:text-5xl font-display font-bold text-primary mb-4">{t('status.title')}</h1>
+                    <p className="text-lg text-muted-foreground">{t('status.desc')}</p>
                 </div>
 
                 {/* Status List */}
@@ -46,14 +49,14 @@ const SystemStatus = () => {
 
                 {/* Incident History (Placeholder) */}
                 <div className="p-8 rounded-2xl bg-muted/30 border border-border">
-                    <h2 className="text-xl font-bold mb-6">Recent Incidents</h2>
+                    <h2 className="text-xl font-bold mb-6">{t('status.incidents.title')}</h2>
                     <div className="text-center py-12">
-                        <p className="text-muted-foreground">No incidents reported in the last 90 days.</p>
+                        <p className="text-muted-foreground">{t('status.incidents.none')}</p>
                     </div>
                 </div>
 
                 <div className="mt-12 text-center text-sm text-muted-foreground">
-                    <p>Status updates are updated every 30 seconds. For immediate assistance, please contact support.</p>
+                    <p>{t('status.footer')}</p>
                 </div>
             </div>
         </div>
