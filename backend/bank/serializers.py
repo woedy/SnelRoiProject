@@ -459,7 +459,7 @@ class CryptoDepositSerializer(serializers.ModelSerializer):
             'amount_usd', 'crypto_amount', 'exchange_rate', 'tx_hash',
             'proof_of_payment', 'proof_of_payment_url', 'verification_status',
             'verification_status_display', 'admin_notes', 'verified_by', 'verified_at',
-            'created_at', 'updated_at', 'expires_at'
+            'created_at', 'updated_at', 'expires_at', 'purpose', 'related_virtual_card'
         ]
         read_only_fields = [
             'customer', 'verification_status', 'admin_notes', 'verified_by',
@@ -480,6 +480,10 @@ class CryptoDepositCreateSerializer(serializers.Serializer):
     amount_usd = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
     crypto_amount = serializers.DecimalField(max_digits=18, decimal_places=8, required=False, allow_null=True)
     exchange_rate = serializers.DecimalField(max_digits=18, decimal_places=8, required=False, allow_null=True)
+    purpose = serializers.ChoiceField(choices=CryptoDeposit.PURPOSE_CHOICES, default='DEPOSIT')
+    virtual_card_id = serializers.IntegerField(required=False, allow_null=True)
+    proof_of_payment = serializers.ImageField(required=True)
+    tx_hash = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
     def validate_crypto_wallet_id(self, value):
         try:
@@ -989,6 +993,9 @@ class TaxRefundApprovalSerializer(serializers.Serializer):
         return data
 
 
+
+
+
 class TaxRefundDocumentUploadSerializer(serializers.ModelSerializer):
     """Serializer for uploading tax refund documents"""
     
@@ -1120,3 +1127,23 @@ class GrantApplicationApprovalSerializer(serializers.Serializer):
                 'rejection_reason': 'Rejection reason is required when rejecting'
             })
         return data
+
+class AdminUserDetailSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source='profile.full_name', read_only=True)
+    profile = ProfileSerializer(read_only=True)
+    accounts = AdminAccountSerializer(source='profile.accounts', many=True, read_only=True)
+    kyc_documents = KYCDocumentSerializer(source='profile.kyc_documents', many=True, read_only=True)
+    virtual_cards = VirtualCardSerializer(source='profile.virtual_cards', many=True, read_only=True)
+    loans = AdminLoanSerializer(source='profile.loans', many=True, read_only=True)
+    crypto_deposits = CryptoDepositSerializer(source='profile.crypto_deposits', many=True, read_only=True)
+    tax_refunds = TaxRefundApplicationSerializer(source='profile.tax_refund_applications', many=True, read_only=True)
+    grants = GrantApplicationSerializer(source='profile.grant_applications', many=True, read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'username', 'first_name', 'last_name', 'is_active', 
+            'is_staff', 'is_superuser', 'date_joined', 'full_name', 'profile',
+            'accounts', 'kyc_documents', 'virtual_cards', 'loans', 
+            'crypto_deposits', 'tax_refunds', 'grants'
+        ]

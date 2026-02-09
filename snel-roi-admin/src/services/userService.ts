@@ -8,8 +8,16 @@ export interface User {
     is_active: boolean;
     is_staff: boolean;
     is_superuser: boolean;
+    date_joined: string;
     full_name?: string;
+    profile?: any;
     accounts?: Account[];
+    kyc_documents?: any[];
+    virtual_cards?: any[];
+    loans?: any[];
+    crypto_deposits?: any[];
+    tax_refunds?: any[];
+    grants?: any[];
 }
 
 export const userService = {

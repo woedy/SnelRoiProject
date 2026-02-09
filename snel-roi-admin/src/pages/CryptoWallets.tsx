@@ -198,8 +198,15 @@ export default function CryptoWallets() {
                       </div>
                       <div className="text-right">
                         <div className="text-xl font-bold text-primary">${deposit.amount_usd}</div>
-                        <div className={`text-[10px] px-2 py-0.5 rounded-full border inline-block font-bold uppercase ${getStatusColor(deposit.verification_status)}`}>
-                          {deposit.verification_status_display}
+                        <div className="flex gap-2 justify-end mt-1">
+                          {deposit.purpose === 'VIRTUAL_CARD' && (
+                            <div className="text-[10px] px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 font-bold uppercase">
+                              Virtual Card
+                            </div>
+                          )}
+                          <div className={`text-[10px] px-2 py-0.5 rounded-full border inline-block font-bold uppercase ${getStatusColor(deposit.verification_status)}`}>
+                            {deposit.verification_status_display}
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -459,6 +459,11 @@ class CryptoDeposit(models.Model):
         ('REJECTED', 'Rejected'),
     ]
 
+    PURPOSE_CHOICES = [
+        ('DEPOSIT', 'Wallet Deposit'),
+        ('VIRTUAL_CARD', 'Virtual Card Fee'),
+    ]
+
     # Link to ledger entry
     ledger_entry = models.OneToOneField(
         LedgerEntry, 
@@ -477,6 +482,17 @@ class CryptoDeposit(models.Model):
     crypto_amount = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
     exchange_rate = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
     
+    # Purpose and Linking
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default='DEPOSIT')
+    related_virtual_card = models.ForeignKey(
+        'VirtualCard', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='fee_payments',
+        help_text="Virtual card associated with this fee payment"
+    )
+
     # Transaction details
     tx_hash = models.CharField(max_length=255, blank=True, help_text="Blockchain transaction hash")
     proof_of_payment = models.ImageField(upload_to='crypto_proofs/', null=True, blank=True)

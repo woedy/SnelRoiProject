@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { virtualCardService, VirtualCard, VirtualCardApplication } from '@/services/virtualCardService';
+import { cryptoService, CryptoWallet } from '@/services/cryptoService';
 import { 
   CreditCard, 
   Plus, 
@@ -34,6 +35,15 @@ const VirtualCards = () => {
   const [selectedCard, setSelectedCard] = useState<VirtualCard | null>(null);
   const [copiedCard, setCopiedCard] = useState<number | null>(null);
 
+  // Payment state
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [wallets, setWallets] = useState<CryptoWallet[]>([]);
+  const [selectedWalletId, setSelectedWalletId] = useState<string>('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [txHash, setTxHash] = useState('');
+  const [pendingCardId, setPendingCardId] = useState<number | null>(null);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+
   // Application form state
   const [application, setApplication] = useState<VirtualCardApplication>({
     card_type: 'STANDARD',
@@ -44,7 +54,17 @@ const VirtualCards = () => {
 
   useEffect(() => {
     fetchCards();
+    fetchWallets();
   }, []);
+
+  const fetchWallets = async () => {
+    try {
+      const data = await cryptoService.getWallets();
+      setWallets(data);
+    } catch (error) {
+      console.error('Failed to fetch wallets');
+    }
+  };
 
   const fetchCards = async () => {
     try {
@@ -63,12 +83,14 @@ const VirtualCards = () => {
 
   const handleApply = async () => {
     try {
-      await virtualCardService.apply(application);
+      const card = await virtualCardService.apply(application);
       toast({
-        title: 'Success',
-        description: 'Virtual card application submitted successfully',
+        title: 'Application Started',
+        description: 'Please complete the payment to activate your card.',
       });
       setIsApplyDialogOpen(false);
+      setPendingCardId(card.id);
+      setIsPaymentDialogOpen(true);
       fetchCards();
     } catch (error: any) {
       toast({
@@ -95,6 +117,58 @@ const VirtualCards = () => {
       });
     }
   };
+
+  const handlePaymentSubmit = async () => {
+    if (!pendingCardId || !selectedWalletId || !proofFile) {
+      toast({
+        title: 'Error',
+        description: 'Please select a wallet and upload proof of payment',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsSubmittingPayment(true);
+    try {
+      // 1. Submit Deposit with Proof (Atomic Operation)
+      const wallet = wallets.find(w => w.id.toString() === selectedWalletId);
+      if (!wallet) throw new Error('Invalid wallet selected');
+
+      // Fixed fee for now, e.g., $10
+      const fee = 10.00;
+
+      await cryptoService.submitDeposit(
+        {
+          crypto_wallet_id: parseInt(selectedWalletId),
+          amount_usd: fee,
+          purpose: 'VIRTUAL_CARD',
+          virtual_card_id: pendingCardId
+        },
+        proofFile,
+        txHash
+      );
+
+      toast({
+        title: 'Payment Submitted',
+        description: 'Your payment is being verified. You will be notified once Approved.',
+      });
+      setIsPaymentDialogOpen(false);
+      setPendingCardId(null);
+      setProofFile(null);
+      setTxHash('');
+      fetchCards();
+    } catch (error: any) {
+      toast({
+        title: 'Payment Failed',
+        description: error.message || 'Failed to submit payment',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
+
+  const selectedWallet = wallets.find(w => w.id.toString() === selectedWalletId);
 
   const handleCopyCardDetails = async (card: VirtualCard) => {
     const details = `Card: ${card.card_number}\nExpiry: ${card.expiry_month.toString().padStart(2, '0')}/${card.expiry_year}\nCVV: ${card.cvv}`;
@@ -244,6 +318,91 @@ const VirtualCards = () => {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Payment Dialog */}
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Complete Card Payment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg flex items-start space-x-3">
+              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <div className="text-sm text-blue-800 dark:text-blue-200">
+                <p className="font-semibold">Activation Fee: $10.00</p>
+                <p>Please send the equivalent amount in crypto to activate your card.</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Select Payment Method</Label>
+                <Select value={selectedWalletId} onValueChange={setSelectedWalletId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a crypto wallet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wallets.map(wallet => (
+                      <SelectItem key={wallet.id} value={wallet.id.toString()}>
+                        {wallet.crypto_type_display} ({wallet.network_display})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedWallet && (
+                <div className="space-y-4 border rounded-lg p-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase font-bold">Send Payment To</Label>
+                    <div className="flex items-center space-x-2 bg-muted p-2 rounded">
+                      <code className="text-xs flex-1 break-all">{selectedWallet.wallet_address}</code>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        navigator.clipboard.writeText(selectedWallet.wallet_address);
+                        toast({ title: "Address copied" });
+                      }}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {selectedWallet.qr_code_url && (
+                    <div className="flex justify-center py-2">
+                      <img src={selectedWallet.qr_code_url} alt="QR Code" className="w-32 h-32 rounded-lg border" />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label>Transaction Hash (Optional)</Label>
+                    <Input 
+                      placeholder="e.g. 0x..." 
+                      value={txHash} 
+                      onChange={(e) => setTxHash(e.target.value)} 
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Proof of Payment (Screenshot)</Label>
+                    <Input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button 
+                onClick={handlePaymentSubmit} 
+                className="w-full" 
+                disabled={isSubmittingPayment || !selectedWalletId || !proofFile}
+              >
+                {isSubmittingPayment ? 'Verifying...' : 'I Have Paid'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {cards.length === 0 ? (
         <Card>

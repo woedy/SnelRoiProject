@@ -13,4 +13,7 @@ COPY backend /app
 # Collect static files during build
 RUN python manage.py collectstatic --noinput
 
+# Create media directory and set permissions
+RUN mkdir -p /app/media && chmod -R 775 /app/media
+
 CMD sh -c "python manage.py migrate && python manage.py seed_system && daphne -b 0.0.0.0 -p 8000 banking.asgi:application"

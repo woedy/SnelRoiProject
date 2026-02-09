@@ -119,4 +119,10 @@ urlpatterns = [
     path('admin/grants/<int:pk>/', views.AdminGrantDetailView.as_view()),
     path('admin/grant-applications/', views.AdminGrantApplicationsView.as_view()),
     path('admin/grant-applications/<int:pk>/', views.AdminGrantApplicationDetailView.as_view()),
+    
+    # Admin Activity & Dashboard Endpoints
+    path('admin/activity-log/', views.AdminActivityLogView.as_view()),
+    path('admin/users/<int:pk>/activity/', views.AdminUserActivityView.as_view()),
+    path('admin/dashboard/stats/', views.AdminDashboardStatsView.as_view()),
+    path('admin/recent-activity/', views.AdminRecentActivityView.as_view()),
 ]

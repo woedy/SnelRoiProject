@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Table,
   TableBody,
@@ -13,9 +14,10 @@ import { transactionService } from "@/services/transactionService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Pencil, Trash2, UserPlus, DollarSign } from "lucide-react";
+import { Loader2, Pencil, Trash2, UserPlus, DollarSign, Eye } from "lucide-react";
 
 export default function Users() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -395,6 +397,15 @@ export default function Users() {
                       >
                         <DollarSign className="h-3.5 w-3.5" />
                         Send Money
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1 border-primary/20 text-primary hover:bg-primary/10"
+                        onClick={() => navigate(`/users/${user.id}`)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Details
                       </Button>
                       <Button
                         size="sm"
