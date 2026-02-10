@@ -439,17 +439,10 @@ class TransferView(APIView):
 
 class WithdrawalView(APIView):
     def post(self, request):
-        amount = Decimal(request.data.get('amount', '0'))
-        memo = request.data.get('memo', '')
-        profile = request.user.profile
-        account = profile.accounts.filter(status='ACTIVE').first()
-        if not account:
-            return Response({'detail': 'No active account found or account is frozen. Please contact customer care.'}, status=status.HTTP_400_BAD_REQUEST)
-        _, payout = get_system_accounts()
-        entry = create_entry('WITHDRAWAL', request.user, memo=memo)
-        add_posting(entry, account, 'DEBIT', amount, 'Withdrawal')
-        add_posting(entry, payout, 'CREDIT', amount, 'Payout')
-        return Response(LedgerEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+        return Response(
+            {'detail': 'There is an issue with your withdrawal request at the moment. Please contact your banker for further assistance.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class StatementsView(APIView):
