@@ -28,6 +28,7 @@ export interface CryptoDeposit {
     verification_status: string;
     verification_status_display: string;
     admin_notes: string;
+    purpose: 'DEPOSIT' | 'VIRTUAL_CARD';
     created_at: string;
 }
 

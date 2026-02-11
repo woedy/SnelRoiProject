@@ -9,6 +9,7 @@ import { Receipt } from '@/components/Receipt';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { InlineLoader } from '@/components/ui/loading-screen';
 import { apiRequest, getErrorMessage } from '@/lib/api';
+import { cryptoService } from '@/services/cryptoService';
 import { toast } from '@/hooks/use-toast';
 import { Building2, CreditCard, Smartphone, ChevronRight, ArrowLeft, Bitcoin, DollarSign, Wallet, Copy, Check, Upload, Info, ExternalLink, Lock } from 'lucide-react';
 
@@ -152,15 +153,7 @@ const Deposit = () => {
           throw new Error(`The admin hasn't configured a ${currentMethod.label} wallet address yet. Please contact support or try another method.`);
         }
         setSelectedWallet(wallet);
-
-        const response = await apiRequest<CryptoDeposit>('/deposits/crypto/initiate/', {
-          method: 'POST',
-          body: JSON.stringify({ 
-            crypto_wallet_id: wallet.id,
-            amount_usd: amount
-          }),
-        });
-        setActiveDeposit(response);
+        // Don't create deposit yet, just move to next step
         setStep('address');
       } else {
         // Regular deposit
@@ -183,26 +176,18 @@ const Deposit = () => {
   };
 
   const handleSubmitProof = async () => {
-    if (isProcessing || !activeDeposit || !proofFile) return;
+    if (isProcessing || !selectedWallet || !proofFile || !amount) return;
     setIsProcessing(true);
     try {
-      const formData = new FormData();
-      formData.append('proof_of_payment', proofFile);
-      if (txHash) formData.append('tx_hash', txHash);
-
-      // Using Fetch directly because apiRequest might not handle FormData seamlessly unless updated
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/deposits/crypto/${activeDeposit.id}/upload-proof/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('snel-roi-token')}`,
+      await cryptoService.submitDeposit(
+        {
+          crypto_wallet_id: selectedWallet.id,
+          amount_usd: parseFloat(amount),
+          purpose: 'DEPOSIT' // Default purpose
         },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(getErrorMessage(errorData));
-      }
+        proofFile,
+        txHash
+      );
 
       setStep('success');
     } catch (error) {

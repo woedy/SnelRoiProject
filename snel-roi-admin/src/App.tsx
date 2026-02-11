@@ -12,6 +12,8 @@ import VirtualCardsFixed from "./pages/VirtualCardsFixed";
 import LoanManagement from "./pages/LoanManagement";
 import KYCManagement from "./pages/KYCManagement";
 import TaxRefundManagement from "./pages/TaxRefundManagement";
+import ActivityLog from "./pages/ActivityLog";
+import UserDetail from "./pages/UserDetail";
 
 // Placeholders for other routes
 // Placeholders for other routes
@@ -26,6 +28,7 @@ function App() {
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="users" element={<Users />} />
+          <Route path="users/:id" element={<UserDetail />} />
           <Route path="accounts" element={<Accounts />} />
           <Route path="transactions" element={<Transactions />} />
           <Route path="loans" element={<LoanManagement />} />
@@ -33,6 +36,7 @@ function App() {
           <Route path="crypto-wallets" element={<CryptoWallets />} />
           <Route path="kyc" element={<KYCManagement />} />
           <Route path="tax-refunds" element={<TaxRefundManagement />} />
+          <Route path="activity-log" element={<ActivityLog />} />
           <Route path="support" element={<CustomerSupport />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

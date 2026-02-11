@@ -94,11 +94,8 @@ class ApiFlowTests(TestCase):
     def test_withdrawal_requires_admin_approval(self):
         self.authenticate()
         response = self.client.post('/api/withdrawals/', {'amount': '5.00'}, format='json')
-        self.assertEqual(response.status_code, 201)
-        entry_id = response.data['id']
-        self.authenticate_admin()
-        approve = self.client.post(f'/api/admin/transactions/{entry_id}/approve/')
-        self.assertEqual(approve.status_code, 200)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('There is an issue with your withdrawal request', response.data['detail'])
 
     def test_statements_generate(self):
         self.authenticate()

@@ -8,6 +8,9 @@ from django.core.mail import send_mail
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from asgiref.sync import async_to_sync
@@ -436,17 +439,10 @@ class TransferView(APIView):
 
 class WithdrawalView(APIView):
     def post(self, request):
-        amount = Decimal(request.data.get('amount', '0'))
-        memo = request.data.get('memo', '')
-        profile = request.user.profile
-        account = profile.accounts.filter(status='ACTIVE').first()
-        if not account:
-            return Response({'detail': 'No active account found or account is frozen. Please contact customer care.'}, status=status.HTTP_400_BAD_REQUEST)
-        _, payout = get_system_accounts()
-        entry = create_entry('WITHDRAWAL', request.user, memo=memo)
-        add_posting(entry, account, 'DEBIT', amount, 'Withdrawal')
-        add_posting(entry, payout, 'CREDIT', amount, 'Payout')
-        return Response(LedgerEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+        return Response(
+            {'detail': 'There is an issue with your withdrawal request at the moment. Please contact your banker for further assistance.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class StatementsView(APIView):
@@ -599,8 +595,9 @@ class AdminUserDetailView(APIView):
         return User.objects.get(pk=pk)
 
     def get(self, request, pk):
+        from .serializers import AdminUserDetailSerializer
         user = self.get_object(pk)
-        return Response(AdminUserSerializer(user).data)
+        return Response(AdminUserDetailSerializer(user, context={'request': request}).data)
 
     def patch(self, request, pk):
         user = self.get_object(pk)
@@ -765,8 +762,9 @@ class CryptoWalletsPublicView(APIView):
 
 
 class CryptoDepositInitiateView(APIView):
-    """Initiate a crypto deposit"""
+    """Initiate a new crypto deposit with proof of payment"""
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
         serializer = CryptoDepositCreateSerializer(data=request.data)
@@ -775,7 +773,7 @@ class CryptoDepositInitiateView(APIView):
         profile = request.user.profile
         wallet = CryptoWallet.objects.get(id=serializer.validated_data['crypto_wallet_id'])
 
-        # Create crypto deposit
+        # Create crypto deposit with proof
         crypto_deposit = CryptoDeposit.objects.create(
             customer=profile,
             crypto_wallet=wallet,
@@ -783,6 +781,11 @@ class CryptoDepositInitiateView(APIView):
             crypto_amount=serializer.validated_data.get('crypto_amount'),
             exchange_rate=serializer.validated_data.get('exchange_rate'),
             expires_at=timezone.now() + timedelta(minutes=30),
+            purpose=serializer.validated_data.get('purpose', 'DEPOSIT'),
+            related_virtual_card_id=serializer.validated_data.get('virtual_card_id'),
+            proof_of_payment=serializer.validated_data['proof_of_payment'],
+            tx_hash=serializer.validated_data.get('tx_hash', ''),
+            verification_status='PENDING_VERIFICATION'  # Directly to verification since proof is provided
         )
 
         response_serializer = CryptoDepositSerializer(crypto_deposit, context={'request': request})
@@ -954,15 +957,42 @@ class AdminCryptoDepositVerifyView(APIView):
                 )
 
             funding, _ = get_system_accounts()
-            entry = create_entry('DEPOSIT', request.user, memo=f'Crypto deposit - {crypto_deposit.crypto_wallet.crypto_type}')
-            add_posting(entry, account, 'CREDIT', crypto_deposit.amount_usd, f'Crypto deposit ({crypto_deposit.crypto_wallet.crypto_type})')
-            add_posting(entry, funding, 'DEBIT', crypto_deposit.amount_usd, 'Crypto funding')
+            
+            if crypto_deposit.purpose == 'VIRTUAL_CARD' and crypto_deposit.related_virtual_card:
+                # 1. Credit User Account (Deposit)
+                entry = create_entry('DEPOSIT', request.user, memo=f'Crypto deposit for Virtual Card Fee - {crypto_deposit.crypto_wallet.crypto_type}')
+                add_posting(entry, account, 'CREDIT', crypto_deposit.amount_usd, f'Crypto deposit ({crypto_deposit.crypto_wallet.crypto_type})')
+                add_posting(entry, funding, 'DEBIT', crypto_deposit.amount_usd, 'Crypto funding')
+                approve_entry(entry, request.user)
+                
+                # 2. Debit User Account (Fee) -> Credit System Revenue (Funding for now, or dedicated revenue account)
+                # Using funding account as revenue destination for simplicity
+                fee_entry = create_entry('WITHDRAWAL', request.user, memo=f'Virtual Card Fee - {crypto_deposit.related_virtual_card.card_type}')
+                add_posting(fee_entry, account, 'DEBIT', crypto_deposit.amount_usd, f'Virtual Card Fee')
+                add_posting(fee_entry, funding, 'CREDIT', crypto_deposit.amount_usd, 'Virtual Card Revenue')
+                approve_entry(fee_entry, request.user)
+                
+                # 3. Activate Virtual Card
+                card = crypto_deposit.related_virtual_card
+                card.status = 'ACTIVE'
+                card.approved_by = request.user
+                card.approved_at = timezone.now()
+                card.save(update_fields=['status', 'approved_by', 'approved_at'])
+                
+                # Notify User about Card Activation
+                from .services import create_virtual_card_notification
+                create_virtual_card_notification(crypto_deposit.customer, 'ACTIVE', card.last_four)
 
-            # Approve the entry immediately
-            approve_entry(entry, request.user)
-
-            # Update crypto deposit
-            crypto_deposit.ledger_entry = entry
+            else:
+                # Standard Deposit Logic
+                entry = create_entry('DEPOSIT', request.user, memo=f'Crypto deposit - {crypto_deposit.crypto_wallet.crypto_type}')
+                add_posting(entry, account, 'CREDIT', crypto_deposit.amount_usd, f'Crypto deposit ({crypto_deposit.crypto_wallet.crypto_type})')
+                add_posting(entry, funding, 'DEBIT', crypto_deposit.amount_usd, 'Crypto funding')
+                # Approve the entry immediately
+                approve_entry(entry, request.user)
+                
+                # Update crypto deposit
+                crypto_deposit.ledger_entry = entry
             crypto_deposit.verification_status = 'APPROVED'
             crypto_deposit.verified_by = request.user
             crypto_deposit.verified_at = timezone.now()
@@ -2834,3 +2864,216 @@ class AdminGrantApplicationDetailView(APIView):
                 {'detail': f'Error processing application: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+# ============ Enhanced Admin Views for Activity Monitoring ============
+
+class AdminActivityLogView(APIView):
+    """Get platform-wide activity log with filtering"""
+    permission_classes = [permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .activity_log import get_platform_activity
+        from datetime import datetime
+        
+        # Get query parameters
+        limit = int(request.query_params.get('limit', 100))
+        user_id = request.query_params.get('user_id')
+        activity_types = request.query_params.getlist('activity_type')
+        date_from_str = request.query_params.get('date_from')
+        date_to_str = request.query_params.get('date_to')
+        
+        # Parse dates
+        date_from = None
+        date_to = None
+        if date_from_str:
+            date_from = datetime.fromisoformat(date_from_str.replace('Z', '+00:00'))
+        if date_to_str:
+            date_to = datetime.fromisoformat(date_to_str.replace('Z', '+00:00'))
+        
+        # Get activities
+        activities = get_platform_activity(
+            limit=limit,
+            activity_types=activity_types if activity_types else None,
+            user_id=int(user_id) if user_id else None,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        
+        return Response({
+            'activities': activities,
+            'count': len(activities),
+        })
+
+
+class AdminUserActivityView(APIView):
+    """Get activity log for a specific user"""
+    permission_classes = [permissions.IsAdminUser]
+    
+    def get(self, request, pk):
+        from .activity_log import get_user_activity
+        
+        limit = int(request.query_params.get('limit', 50))
+        activity_types = request.query_params.getlist('activity_type')
+        
+        activities = get_user_activity(
+            user_id=pk,
+            limit=limit,
+            activity_types=activity_types if activity_types else None,
+        )
+        
+        return Response({
+            'user_id': pk,
+            'activities': activities,
+            'count': len(activities),
+        })
+
+
+class AdminDashboardStatsView(APIView):
+    """Get comprehensive dashboard statistics"""
+    permission_classes = [permissions.IsAdminUser]
+    
+    def get(self, request):
+        from django.db.models import Count, Sum, Avg
+        from datetime import timedelta
+        
+        now = timezone.now()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+        
+        User = get_user_model()
+        
+        # User statistics
+        total_users = User.objects.count()
+        active_users = User.objects.filter(is_active=True).count()
+        new_users_week = User.objects.filter(date_joined__gte=week_ago).count()
+        new_users_month = User.objects.filter(date_joined__gte=month_ago).count()
+        
+        # Account statistics
+        total_accounts = Account.objects.exclude(type='SYSTEM').count()
+        active_accounts = Account.objects.filter(status='ACTIVE').exclude(type='SYSTEM').count()
+        frozen_accounts = Account.objects.filter(status='FROZEN').count()
+        
+        # Calculate total balance
+        accounts = Account.objects.exclude(type='SYSTEM')
+        total_balance = sum([acc.balance() for acc in accounts])
+        
+        # Transaction statistics
+        total_transactions = LedgerEntry.objects.count()
+        pending_transactions = LedgerEntry.objects.filter(status='PENDING').count()
+        approved_transactions = LedgerEntry.objects.filter(status='POSTED').count()
+        
+        # Transaction volume
+        transactions_today = LedgerEntry.objects.filter(created_at__date=now.date()).count()
+        transactions_week = LedgerEntry.objects.filter(created_at__gte=week_ago).count()
+        transactions_month = LedgerEntry.objects.filter(created_at__gte=month_ago).count()
+        
+        # Transaction amount totals
+        month_volume = LedgerPosting.objects.filter(
+            entry__created_at__gte=month_ago,
+            entry__status='POSTED',
+            direction='DEBIT'
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        # KYC statistics
+        pending_kyc = CustomerProfile.objects.filter(kyc_status='PENDING').count()
+        under_review_kyc = CustomerProfile.objects.filter(kyc_status='UNDER_REVIEW').count()
+        verified_kyc = CustomerProfile.objects.filter(kyc_status='VERIFIED').count()
+        
+        # Loan statistics
+        pending_loans = Loan.objects.filter(status='PENDING').count()
+        active_loans = Loan.objects.filter(status='ACTIVE').count()
+        total_loan_amount = Loan.objects.filter(status='ACTIVE').aggregate(
+            total=Sum('approved_amount')
+        )['total'] or 0
+        
+        # Virtual card statistics
+        pending_cards = VirtualCard.objects.filter(status='PENDING').count()
+        active_cards = VirtualCard.objects.filter(status='ACTIVE').count()
+        
+        # Tax refund statistics
+        pending_tax_refunds = TaxRefundApplication.objects.filter(
+            status__in=['SUBMITTED', 'UNDER_REVIEW']
+        ).count()
+        
+        # Grant statistics
+        pending_grants = GrantApplication.objects.filter(
+            status__in=['SUBMITTED', 'UNDER_REVIEW']
+        ).count()
+        
+        # Support statistics
+        open_support = SupportConversation.objects.filter(
+            status__in=['OPEN', 'IN_PROGRESS']
+        ).count()
+        
+        # Crypto deposit statistics
+        pending_crypto = CryptoDeposit.objects.filter(
+            verification_status='PENDING_VERIFICATION'
+        ).count()
+        
+        return Response({
+            'users': {
+                'total': total_users,
+                'active': active_users,
+                'new_this_week': new_users_week,
+                'new_this_month': new_users_month,
+                'growth_rate': round((new_users_month / total_users * 100) if total_users > 0 else 0, 2),
+            },
+            'accounts': {
+                'total': total_accounts,
+                'active': active_accounts,
+                'frozen': frozen_accounts,
+                'total_balance': float(total_balance),
+            },
+            'transactions': {
+                'total': total_transactions,
+                'pending': pending_transactions,
+                'approved': approved_transactions,
+                'today': transactions_today,
+                'this_week': transactions_week,
+                'this_month': transactions_month,
+                'volume_this_month': float(month_volume),
+            },
+            'kyc': {
+                'pending': pending_kyc,
+                'under_review': under_review_kyc,
+                'verified': verified_kyc,
+            },
+            'loans': {
+                'pending': pending_loans,
+                'active': active_loans,
+                'total_amount': float(total_loan_amount),
+            },
+            'virtual_cards': {
+                'pending': pending_cards,
+                'active': active_cards,
+            },
+            'pending_approvals': {
+                'transactions': pending_transactions,
+                'kyc_documents': under_review_kyc,
+                'loans': pending_loans,
+                'virtual_cards': pending_cards,
+                'tax_refunds': pending_tax_refunds,
+                'grants': pending_grants,
+                'crypto_deposits': pending_crypto,
+                'total': pending_transactions + under_review_kyc + pending_loans + pending_cards + pending_tax_refunds + pending_grants + pending_crypto,
+            },
+            'support': {
+                'open_tickets': open_support,
+            },
+        })
+
+
+class AdminRecentActivityView(APIView):
+    """Get recent platform activities"""
+    permission_classes = [permissions.IsAdminUser]
+    
+    def get(self, request):
+        from .activity_log import get_platform_activity
+        
+        limit = int(request.query_params.get('limit', 50))
+        activities = get_platform_activity(limit=limit)
+        
+        return Response({
+            'activities': activities,
+            'count': len(activities),
+        })
