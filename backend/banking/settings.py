@@ -153,7 +153,8 @@ TRANSACTION_REVIEW_DELAY_SECONDS = int(os.environ.get('TRANSACTION_REVIEW_DELAY_
 USE_SMTP_EMAIL = os.environ.get('USE_SMTP_EMAIL', 'false').lower() == 'true'
 
 if USE_SMTP_EMAIL:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_BACKEND = 'bank.email_backend.AuditingEmailBackend'
+    AUDIT_EMAIL_INNER_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
     EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
     EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
     EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'true').lower() == 'true'
@@ -161,7 +162,8 @@ if USE_SMTP_EMAIL:
     EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
     EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 else:
-    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+    EMAIL_BACKEND = 'bank.email_backend.AuditingEmailBackend'
+    AUDIT_EMAIL_INNER_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
     EMAIL_FILE_PATH = BASE_DIR / 'sent_emails'
 
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or os.environ.get('EMAIL_HOST_USER') or 'no-reply@snelroi.local'

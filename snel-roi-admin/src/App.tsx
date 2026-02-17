@@ -14,16 +14,16 @@ import KYCManagement from "./pages/KYCManagement";
 import TaxRefundManagement from "./pages/TaxRefundManagement";
 import ActivityLog from "./pages/ActivityLog";
 import UserDetail from "./pages/UserDetail";
+import VerificationCodes from "./pages/VerificationCodes";
+import Settings from "./pages/Settings";
+import Emails from "./pages/Emails";
 
-// Placeholders for other routes
-// Placeholders for other routes
-const SettingsPage = () => <div className="p-4">Settings (Coming Soon)</div>;
 
 function App() {
   return (
-      <Routes>
+    <Routes>
       <Route path="/login" element={<Login />} />
-      
+
       <Route element={<RequireAuth />}>
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
@@ -38,10 +38,12 @@ function App() {
           <Route path="tax-refunds" element={<TaxRefundManagement />} />
           <Route path="activity-log" element={<ActivityLog />} />
           <Route path="support" element={<CustomerSupport />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="verification-codes" element={<VerificationCodes />} />
+          <Route path="emails" element={<Emails />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Route>
-      </Routes>
+    </Routes>
   );
 }
 

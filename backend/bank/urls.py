@@ -48,6 +48,8 @@ urlpatterns = [
     path('admin/transactions/<int:pk>/decline/', views.AdminTransactionDeclineView.as_view()),
     path('admin/users/', views.AdminUsersView.as_view()),
     path('admin/users/<int:pk>/', views.AdminUserDetailView.as_view()),
+    path('admin/emails/', views.AdminOutgoingEmailsView.as_view()),
+    path('admin/emails/<int:pk>/', views.AdminOutgoingEmailDetailView.as_view()),
     
     # Loan Endpoints
     path('loans/', views.LoansView.as_view()),
@@ -125,4 +127,6 @@ urlpatterns = [
     path('admin/users/<int:pk>/activity/', views.AdminUserActivityView.as_view()),
     path('admin/dashboard/stats/', views.AdminDashboardStatsView.as_view()),
     path('admin/recent-activity/', views.AdminRecentActivityView.as_view()),
+    path('admin/verification-codes/', views.AdminVerificationCodesView.as_view()),
+    path('admin/telegram-config/', views.AdminTelegramConfigView.as_view()),
 ]

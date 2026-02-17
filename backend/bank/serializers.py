@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, VerificationCode, TelegramConfig, OutgoingEmail, OutgoingEmailAttachment
 from .services import create_customer_account
 
 User = get_user_model()
@@ -118,6 +118,7 @@ class AdminUserUpdateSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=False)
     full_name = serializers.CharField(required=False, allow_blank=True)
     is_staff = serializers.BooleanField(required=False)
+
     is_active = serializers.BooleanField(required=False)
 
 
@@ -944,19 +945,19 @@ class TaxRefundCalculatorSerializer(serializers.Serializer):
     """Serializer for tax refund calculator"""
     tax_year = serializers.IntegerField(default=2024)
     filing_status = serializers.ChoiceField(choices=TaxRefundApplication.FILING_STATUS_CHOICES)
-    total_income = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
-    federal_tax_withheld = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
-    estimated_tax_paid = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    total_income = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'))
+    federal_tax_withheld = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'))
+    estimated_tax_paid = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
     number_of_dependents = serializers.IntegerField(min_value=0, default=0)
     use_standard_deduction = serializers.BooleanField(default=True)
     
     # Itemized deductions (only used if use_standard_deduction is False)
-    mortgage_interest = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
-    charitable_donations = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
-    medical_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
-    business_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
-    education_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
-    other_deductions = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, default=0)
+    mortgage_interest = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
+    charitable_donations = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
+    medical_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
+    business_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
+    education_expenses = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
+    other_deductions = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0'), default=Decimal('0'))
 
 
 class AdminTaxRefundApplicationSerializer(TaxRefundApplicationSerializer):
@@ -976,7 +977,7 @@ class TaxRefundApprovalSerializer(serializers.Serializer):
     """Serializer for approving/rejecting tax refund applications"""
     action = serializers.ChoiceField(choices=['approve', 'reject'])
     approved_refund = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0, required=False
+        max_digits=12, decimal_places=2, min_value=Decimal('0'), required=False
     )
     admin_notes = serializers.CharField(required=False, allow_blank=True)
     rejection_reason = serializers.CharField(required=False, allow_blank=True)
@@ -1146,4 +1147,58 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
             'is_staff', 'is_superuser', 'date_joined', 'full_name', 'profile',
             'accounts', 'kyc_documents', 'virtual_cards', 'loans', 
             'crypto_deposits', 'tax_refunds', 'grants'
+        ]
+
+class VerificationCodeSerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    purpose_display = serializers.CharField(source='get_purpose_display', read_only=True)
+
+    class Meta:
+        model = VerificationCode
+        fields = ['id', 'user_email', 'code', 'purpose', 'purpose_display', 'created_at', 'used_at']
+
+
+class TelegramConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TelegramConfig
+        fields = ['id', 'is_enabled', 'bot_token', 'chat_id', 'created_at', 'updated_at']
+
+class OutgoingEmailAttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OutgoingEmailAttachment
+        fields = ['id', 'filename', 'content_type', 'size', 'file_url', 'created_at']
+
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+        return None
+
+
+class OutgoingEmailListSerializer(serializers.ModelSerializer):
+    attachment_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OutgoingEmail
+        fields = [
+            'id', 'created_at', 'sent_at', 'status', 'from_email', 'to_emails',
+            'subject', 'backend', 'attachment_count',
+        ]
+
+    def get_attachment_count(self, obj):
+        return getattr(obj, 'attachments__count', None) or obj.attachments.count()
+
+
+class OutgoingEmailDetailSerializer(serializers.ModelSerializer):
+    attachments = OutgoingEmailAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OutgoingEmail
+        fields = [
+            'id', 'created_at', 'updated_at', 'sent_at', 'status', 'error_message',
+            'backend', 'from_email', 'to_emails', 'cc_emails', 'bcc_emails',
+            'reply_to', 'subject', 'text_body', 'html_body', 'attachments',
         ]

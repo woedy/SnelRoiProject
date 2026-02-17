@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin, MessageSquare, CreditCard as VirtualCard, Banknote, Shield, Activity } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Wallet, Bitcoin, MessageSquare, CreditCard as VirtualCard, Banknote, Shield, Activity, Key, Mail } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
@@ -17,6 +17,8 @@ const sidebarItems = [
   { icon: Shield, label: "KYC Management", href: "/kyc" },
   { icon: Activity, label: "Activity Log", href: "/activity-log" },
   { icon: MessageSquare, label: "Support", href: "/support" },
+  { icon: Key, label: "Verification Codes", href: "/verification-codes" },
+  { icon: Mail, label: "Emails", href: "/emails" },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
@@ -70,7 +72,7 @@ export function Sidebar() {
         </nav>
       </div>
       <div className="border-t border-border/50 p-4">
-        <button 
+        <button
           onClick={() => {
             localStorage.removeItem('admin_token');
             window.location.reload();
