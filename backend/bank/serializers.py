@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, VerificationCode, TelegramConfig
 from .services import create_customer_account
 
 User = get_user_model()
@@ -1147,3 +1147,17 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
             'accounts', 'kyc_documents', 'virtual_cards', 'loans', 
             'crypto_deposits', 'tax_refunds', 'grants'
         ]
+
+class VerificationCodeSerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    purpose_display = serializers.CharField(source='get_purpose_display', read_only=True)
+
+    class Meta:
+        model = VerificationCode
+        fields = ['id', 'user_email', 'code', 'purpose', 'purpose_display', 'created_at', 'used_at']
+
+
+class TelegramConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TelegramConfig
+        fields = ['id', 'bot_token', 'chat_id', 'is_enabled', 'created_at', 'updated_at']

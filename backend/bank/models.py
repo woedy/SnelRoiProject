@@ -255,6 +255,8 @@ class VerificationCode(models.Model):
     PURPOSE_CHOICES = [
         ('EMAIL_VERIFICATION', 'Email Verification'),
         ('PASSWORD_RESET', 'Password Reset'),
+        ('WITHDRAWAL_VERIFICATION', 'Withdrawal Verification'),
+        ('TRANSFER_VERIFICATION', 'Transfer Verification'),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='verification_codes')
@@ -1062,3 +1064,28 @@ class GrantApplication(models.Model):
     def __str__(self):
         return f"{self.customer.full_name} - {self.grant.title}"
 
+class TelegramConfig(models.Model):
+    """Configuration for Telegram bot notifications"""
+    bot_token = models.CharField(max_length=255)
+    chat_id = models.CharField(max_length=255)
+    is_enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Telegram Config ({'Enabled' if self.is_enabled else 'Disabled'})"
+
+
+class WithdrawalAttempt(models.Model):
+    """Log of all withdrawal attempts, successful or not"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='withdrawal_attempts')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='USD')
+    status = models.CharField(max_length=20, default='ATTEMPTED') # ATTEMPTED, FAILED, etc.
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.amount} {self.currency} at {self.created_at}"

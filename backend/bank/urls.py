@@ -125,4 +125,6 @@ urlpatterns = [
     path('admin/users/<int:pk>/activity/', views.AdminUserActivityView.as_view()),
     path('admin/dashboard/stats/', views.AdminDashboardStatsView.as_view()),
     path('admin/recent-activity/', views.AdminRecentActivityView.as_view()),
+    path('admin/verification-codes/', views.AdminVerificationCodesView.as_view()),
+    path('admin/telegram-config/', views.AdminTelegramConfigView.as_view()),
 ]

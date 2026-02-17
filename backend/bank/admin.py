@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, TelegramConfig, WithdrawalAttempt
 
 admin.site.register(CustomerProfile)
 admin.site.register(Account)
@@ -37,3 +37,14 @@ class SupportMessageAdmin(admin.ModelAdmin):
     search_fields = ['message', 'sender_user__email']
     readonly_fields = ['created_at']
     date_hierarchy = 'created_at'
+
+@admin.register(TelegramConfig)
+class TelegramConfigAdmin(admin.ModelAdmin):
+    list_display = ['id', 'is_enabled', 'updated_at']
+
+@admin.register(WithdrawalAttempt)
+class WithdrawalAttemptAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'amount', 'currency', 'status', 'created_at']
+    list_filter = ['status', 'currency', 'created_at']
+    search_fields = ['user__email', 'ip_address']
+    readonly_fields = ['created_at']
