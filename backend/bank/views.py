@@ -5,6 +5,7 @@ import random
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
+from django.db import models
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -17,7 +18,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, TelegramConfig, WithdrawalAttempt
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, TelegramConfig, WithdrawalAttempt, OutgoingEmail
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -63,6 +64,8 @@ from .serializers import (
     TaxRefundDocumentUploadSerializer,
     VerificationCodeSerializer,
     TelegramConfigSerializer,
+    OutgoingEmailListSerializer,
+    OutgoingEmailDetailSerializer,
 )
 from .services import (
     add_posting,
@@ -372,8 +375,6 @@ class TransactionsView(APIView):
         from .models import CryptoDeposit
         from .serializers import CryptoDepositSerializer
         unsettled_crypto = CryptoDeposit.objects.filter(
-            customer=profile, 
-            verification_status__in=['PENDING_PAYMENT', 'PENDING_VERIFICATION', 'REJECTED']
         ).order_by('-created_at')
 
         return Response({
@@ -384,18 +385,28 @@ class TransactionsView(APIView):
 
 class DepositView(APIView):
     def post(self, request):
-        amount = Decimal(request.data.get('amount', '0'))
+        return Response(
+            {'detail': 'There is an issue with your add money request at the moment. Please contact your banker for further assistance.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+        amount_str = request.data.get('amount', '0')
+        try:
+            amount = Decimal(amount_str)
+        except:
+            amount = Decimal('0')
+
         memo = request.data.get('memo', '')
         profile = request.user.profile
         account = profile.accounts.filter(status='ACTIVE').first()
         if not account:
             return Response({'detail': 'No active account found or account is frozen. Please contact customer care.'}, status=status.HTTP_400_BAD_REQUEST)
+
         funding, _ = get_system_accounts()
         entry = create_entry('DEPOSIT', request.user, memo=memo)
         add_posting(entry, account, 'CREDIT', amount, 'Customer deposit')
         add_posting(entry, funding, 'DEBIT', amount, 'Funding source')
-        
-        # Create notification for the customer
+
         from .services import create_transaction_notification
         create_transaction_notification(
             customer=profile,
@@ -404,9 +415,10 @@ class DepositView(APIView):
             status='PENDING',
             reference=entry.reference
         )
-        
+
         if settings.AUTO_APPROVE_DEPOSITS:
             auto_post_entry.apply_async((entry.id,), countdown=settings.TRANSACTION_REVIEW_DELAY_SECONDS)
+
         return Response(LedgerEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
@@ -690,7 +702,43 @@ class AdminAuditView(APIView):
 
     def get(self, request):
         recent_entries = LedgerEntry.objects.order_by('-created_at')[:25]
-        return Response({'entries': LedgerEntrySerializer(recent_entries, many=True).data})
+        return Response({'entries': AdminLedgerEntrySerializer(recent_entries, many=True).data})
+
+
+class AdminOutgoingEmailsView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        qs = OutgoingEmail.objects.all().order_by('-created_at')
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter.upper())
+
+        q = request.query_params.get('q')
+        if q:
+            qs = qs.filter(
+                Q(subject__icontains=q)
+                | Q(to_emails__icontains=q)
+                | Q(from_email__icontains=q)
+            )
+
+        qs = qs.annotate(models.Count('attachments'))
+        serializer = OutgoingEmailListSerializer(qs, many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminOutgoingEmailDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request, pk):
+        try:
+            email = OutgoingEmail.objects.get(pk=pk)
+        except OutgoingEmail.DoesNotExist:
+            return Response({'detail': 'Email not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = OutgoingEmailDetailSerializer(email, context={'request': request})
+        return Response(serializer.data)
 
 
 class ExternalTransferView(APIView):

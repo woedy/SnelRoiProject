@@ -16,6 +16,7 @@ import ActivityLog from "./pages/ActivityLog";
 import UserDetail from "./pages/UserDetail";
 import VerificationCodes from "./pages/VerificationCodes";
 import Settings from "./pages/Settings";
+import Emails from "./pages/Emails";
 
 
 function App() {
@@ -38,6 +39,7 @@ function App() {
           <Route path="activity-log" element={<ActivityLog />} />
           <Route path="support" element={<CustomerSupport />} />
           <Route path="verification-codes" element={<VerificationCodes />} />
+          <Route path="emails" element={<Emails />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Route>

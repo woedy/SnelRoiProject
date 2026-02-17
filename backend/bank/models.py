@@ -633,6 +633,68 @@ class Notification(models.Model):
             self.save(update_fields=['is_read', 'read_at'])
 
 
+class OutgoingEmail(models.Model):
+    """Audit log of emails sent by the platform."""
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SENT', 'Sent'),
+        ('FAILED', 'Failed'),
+    ]
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    sent_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
+    error_message = models.TextField(blank=True)
+
+    backend = models.CharField(max_length=255, blank=True)
+
+    from_email = models.EmailField(blank=True)
+    to_emails = models.TextField(help_text="Comma-separated recipient list")
+    cc_emails = models.TextField(blank=True, help_text="Comma-separated CC list")
+    bcc_emails = models.TextField(blank=True, help_text="Comma-separated BCC list")
+    reply_to = models.TextField(blank=True, help_text="Comma-separated Reply-To list")
+
+    subject = models.CharField(max_length=998, blank=True)
+    text_body = models.TextField(blank=True)
+    html_body = models.TextField(blank=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='outgoing_emails_created',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.subject} -> {self.to_emails} ({self.status})"
+
+
+class OutgoingEmailAttachment(models.Model):
+    email = models.ForeignKey(OutgoingEmail, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='outgoing_email_attachments/')
+    filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=255, blank=True)
+    size = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return self.filename
+
+
 class VirtualCard(models.Model):
     """Virtual debit cards linked to customer accounts"""
     STATUS_CHOICES = [

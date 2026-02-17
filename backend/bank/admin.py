@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, TelegramConfig, WithdrawalAttempt
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, TelegramConfig, WithdrawalAttempt, OutgoingEmail, OutgoingEmailAttachment
 
 admin.site.register(CustomerProfile)
 admin.site.register(Account)
@@ -47,4 +47,20 @@ class WithdrawalAttemptAdmin(admin.ModelAdmin):
     list_display = ['id', 'user', 'amount', 'currency', 'status', 'created_at']
     list_filter = ['status', 'currency', 'created_at']
     search_fields = ['user__email', 'ip_address']
+    readonly_fields = ['created_at']
+
+
+@admin.register(OutgoingEmail)
+class OutgoingEmailAdmin(admin.ModelAdmin):
+    list_display = ['id', 'created_at', 'sent_at', 'status', 'from_email', 'to_emails', 'subject']
+    list_filter = ['status', 'created_at']
+    search_fields = ['subject', 'to_emails', 'from_email']
+    readonly_fields = ['created_at', 'updated_at', 'sent_at']
+
+
+@admin.register(OutgoingEmailAttachment)
+class OutgoingEmailAttachmentAdmin(admin.ModelAdmin):
+    list_display = ['id', 'email', 'filename', 'content_type', 'size', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['filename', 'email__subject', 'email__to_emails']
     readonly_fields = ['created_at']
