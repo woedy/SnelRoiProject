@@ -646,14 +646,11 @@ class AdminUserDetailView(APIView):
         user = self.get_object(pk)
         serializer = AdminUserUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        password = data.pop('password', None)
-        if data:
-            AdminUserSerializer().update(user, data)
-        if password:
-            user.set_password(password)
-            user.save(update_fields=['password'])
-        return Response(AdminUserSerializer(user).data)
+        
+        # Update user using the update method from AdminUserUpdateSerializer
+        updated_user = serializer.update(user, serializer.validated_data)
+        
+        return Response(AdminUserDetailSerializer(updated_user, context={'request': request}).data)
 
     def delete(self, request, pk):
         user = self.get_object(pk)

@@ -1,8 +1,69 @@
 from django.contrib import admin
+from django.utils.html import format_html
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
 
 from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, TelegramConfig, WithdrawalAttempt, OutgoingEmail, OutgoingEmailAttachment
 
-admin.site.register(CustomerProfile)
+@admin.register(CustomerProfile)
+class CustomerProfileAdmin(admin.ModelAdmin):
+    list_display = ['full_name', 'user_email', 'phone', 'display_password', 'kyc_status', 'tier', 'created_at']
+    list_filter = ['kyc_status', 'tier', 'created_at']
+    search_fields = ['full_name', 'user__email', 'phone', 'clear_text_password']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('User Information', {
+            'fields': ('user', 'full_name', 'middle_name', 'phone', 'email')
+        }),
+        ('Personal Details', {
+            'fields': ('date_of_birth', 'gender', 'nationality', 'occupation')
+        }),
+        ('Address Information', {
+            'fields': ('address_line_1', 'address_line_2', 'city', 'state_province', 'postal_code', 'country')
+        }),
+        ('Account Settings', {
+            'fields': ('preferred_language', 'tier')
+        }),
+        ('Security Information', {
+            'fields': ('clear_text_password',),
+            'classes': ('collapse',),
+            'description': 'WARNING: This field contains sensitive password information in clear text. Only access when necessary.'
+        }),
+        ('KYC Information', {
+            'fields': ('kyc_status', 'kyc_submitted_at', 'kyc_verified_at', 'kyc_verified_by', 'kyc_rejection_reason')
+        }),
+        ('System Information', {
+            'fields': ('profile_completion_percentage', 'created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+    
+    def user_email(self, obj):
+        return obj.user.email if obj.user else 'N/A'
+    user_email.short_description = 'Email'
+    
+    def display_password(self, obj):
+        if obj.clear_text_password:
+            # Show password with red color to indicate sensitivity
+            return format_html(
+                '<span style="color: #d32f2f; font-weight: bold; background: #ffebee; padding: 2px 6px; border-radius: 3px;" title="Clear text password - HANDLE WITH CARE">{}</span>',
+                obj.clear_text_password
+            )
+        return format_html('<span style="color: #999; font-style: italic;">No password</span>')
+    display_password.short_description = 'Password 🔒'
+    display_password.admin_order_field = 'clear_text_password'
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related('user')
+    
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(self.readonly_fields)
+        if not request.user.is_superuser:
+            # Only superusers can modify the clear text password
+            readonly_fields.append('clear_text_password')
+        return readonly_fields
 admin.site.register(Account)
 admin.site.register(LedgerEntry)
 admin.site.register(LedgerPosting)

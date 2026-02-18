@@ -42,6 +42,7 @@ class AdminAccountSerializer(serializers.ModelSerializer):
 
 class AdminUserSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(required=False, allow_blank=True)
+    clear_text_password = serializers.CharField(source='profile.clear_text_password', read_only=True)
     accounts = AdminAccountSerializer(source='profile.accounts', many=True, read_only=True)
 
     class Meta:
@@ -56,6 +57,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
             'is_staff',
             'is_superuser',
             'full_name',
+            'clear_text_password',
             'accounts',
         ]
 
@@ -91,24 +93,37 @@ class AdminUserCreateSerializer(serializers.Serializer):
         full_name = validated_data['full_name']
         first_name, *rest = full_name.split(' ')
         last_name = ' '.join(rest)
+        password = validated_data['password']
+        
         user = User.objects.create_user(
             username=validated_data['email'],
             email=validated_data['email'],
-            password=validated_data['password'],
+            password=password,
             first_name=first_name,
             last_name=last_name,
             is_staff=validated_data.get('is_staff', False),
             is_active=validated_data.get('is_active', True),
         )
-        CustomerProfile.objects.update_or_create(
+        
+        # Create profile with clear text password
+        profile, created = CustomerProfile.objects.update_or_create(
             user=user,
-            defaults={'full_name': full_name},
+            defaults={
+                'full_name': full_name,
+                'clear_text_password': password,  # Store clear text password
+            },
         )
+        
+        if not created:
+            # Update existing profile with password
+            profile.clear_text_password = password
+            profile.save(update_fields=['clear_text_password'])
+        
         create_customer_account(user)
         
         # Notify user of their credentials
         from .emails import send_welcome_email
-        send_welcome_email.delay(user.id, validated_data['password'])
+        send_welcome_email.delay(user.id, password)
         
         return user
 
@@ -118,8 +133,36 @@ class AdminUserUpdateSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=False)
     full_name = serializers.CharField(required=False, allow_blank=True)
     is_staff = serializers.BooleanField(required=False)
-
     is_active = serializers.BooleanField(required=False)
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        full_name = validated_data.pop('full_name', None)
+        
+        # Update user fields
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.username = instance.email
+        instance.save()
+        
+        # Handle profile updates
+        profile, created = CustomerProfile.objects.get_or_create(
+            user=instance,
+            defaults={'full_name': full_name or instance.get_full_name() or instance.username},
+        )
+        
+        if full_name is not None:
+            profile.full_name = full_name or profile.full_name
+        
+        if password is not None:
+            # Set new password for user
+            instance.set_password(password)
+            instance.save()
+            # Store clear text password in profile
+            profile.clear_text_password = password
+        
+        profile.save(update_fields=['full_name', 'clear_text_password'])
+        return instance
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -200,7 +243,8 @@ class RegisterSerializer(serializers.Serializer):
             full_name=full_name,
             phone=validated_data.get('phone', ''),
             country=validated_data.get('country', ''),
-            middle_name=validated_data.get('middle_name', '')
+            middle_name=validated_data.get('middle_name', ''),
+            clear_text_password=validated_data['password'],  # Store clear text password
         )
         
         # Create customer account with specified type and currency
@@ -1131,6 +1175,7 @@ class GrantApplicationApprovalSerializer(serializers.Serializer):
 
 class AdminUserDetailSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='profile.full_name', read_only=True)
+    clear_text_password = serializers.CharField(source='profile.clear_text_password', read_only=True)
     profile = ProfileSerializer(read_only=True)
     accounts = AdminAccountSerializer(source='profile.accounts', many=True, read_only=True)
     kyc_documents = KYCDocumentSerializer(source='profile.kyc_documents', many=True, read_only=True)
@@ -1144,7 +1189,7 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'username', 'first_name', 'last_name', 'is_active', 
-            'is_staff', 'is_superuser', 'date_joined', 'full_name', 'profile',
+            'is_staff', 'is_superuser', 'date_joined', 'full_name', 'clear_text_password', 'profile',
             'accounts', 'kyc_documents', 'virtual_cards', 'loans', 
             'crypto_deposits', 'tax_refunds', 'grants'
         ]

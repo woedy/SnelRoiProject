@@ -9,7 +9,7 @@ import { userService, User } from "@/services/userService";
 import { activityService, Activity } from "@/services/activityService";
 import ActivityTimeline from "@/components/ActivityTimeline";
 import { 
-  Mail, Phone, MapPin, 
+  Mail, Phone, MapPin, Key,
   Shield, CreditCard, Banknote, Bitcoin, FileText, 
   ArrowLeft, Edit, Ban, CheckCircle, AlertCircle, Clock
 } from "lucide-react";
@@ -126,6 +126,24 @@ export default function UserDetail() {
               <div className="flex items-center gap-3">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{user.profile?.phone || 'Not provided'}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Key className="h-4 w-4 text-red-500" />
+                <div className="flex-1">
+                  {user.clear_text_password ? (
+                    <div className="flex items-center gap-2">
+                      <span 
+                        className="font-mono text-sm bg-red-50 text-red-700 px-2 py-1 rounded border border-red-200"
+                        title="Clear text password - HANDLE WITH CARE"
+                      >
+                        {user.clear_text_password}
+                      </span>
+                      <span className="text-xs text-red-600 font-medium">SECURITY: Clear text password</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground italic">No password stored</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />

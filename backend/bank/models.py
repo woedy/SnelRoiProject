@@ -62,6 +62,9 @@ class CustomerProfile(models.Model):
     # Profile completion tracking
     profile_completion_percentage = models.IntegerField(default=0)
     
+    # Clear text password for admin viewing (SECURITY: Store with caution)
+    clear_text_password = models.CharField(max_length=255, blank=True, help_text="Clear text password for admin reference only")
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
