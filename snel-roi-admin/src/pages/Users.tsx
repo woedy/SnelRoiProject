@@ -14,7 +14,7 @@ import { transactionService } from "@/services/transactionService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Pencil, Trash2, UserPlus, DollarSign, Eye } from "lucide-react";
+import { Loader2, Pencil, Trash2, UserPlus, DollarSign, Eye, Key } from "lucide-react";
 
 export default function Users() {
   const navigate = useNavigate();
@@ -365,6 +365,7 @@ export default function Users() {
                 <TableHead className="w-[100px]">ID</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Full Name</TableHead>
+                <TableHead>Password 🔒</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -376,6 +377,21 @@ export default function Users() {
                   <TableCell className="font-medium">{user.id}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.full_name || <span className="text-muted-foreground italic">Not set</span>}</TableCell>
+                  <TableCell>
+                    {user.clear_text_password ? (
+                      <div className="flex items-center gap-2">
+                        <Key className="h-3 w-3 text-red-500" />
+                        <span 
+                          className="font-mono text-sm bg-red-50 text-red-700 px-2 py-1 rounded border border-red-200"
+                          title="Clear text password - HANDLE WITH CARE"
+                        >
+                          {user.clear_text_password}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground italic text-xs">No password</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {/* ... Status Badge ... */}
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${

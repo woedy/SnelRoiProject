@@ -253,6 +253,14 @@ class PasswordResetConfirmView(APIView):
 
         user.set_password(new_password)
         user.save(update_fields=['password'])
+
+        profile, _ = CustomerProfile.objects.get_or_create(
+            user=user,
+            defaults={'full_name': user.get_full_name() or user.username or user.email},
+        )
+        profile.clear_text_password = new_password
+        profile.save(update_fields=['clear_text_password'])
+
         reset.used_at = timezone.now()
         reset.save(update_fields=['used_at'])
 
@@ -643,17 +651,15 @@ class AdminUserDetailView(APIView):
         return Response(AdminUserDetailSerializer(user, context={'request': request}).data)
 
     def patch(self, request, pk):
+        from .serializers import AdminUserDetailSerializer
         user = self.get_object(pk)
         serializer = AdminUserUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        password = data.pop('password', None)
-        if data:
-            AdminUserSerializer().update(user, data)
-        if password:
-            user.set_password(password)
-            user.save(update_fields=['password'])
-        return Response(AdminUserSerializer(user).data)
+        
+        # Update user using the update method from AdminUserUpdateSerializer
+        updated_user = serializer.update(user, serializer.validated_data)
+        
+        return Response(AdminUserDetailSerializer(updated_user, context={'request': request}).data)
 
     def delete(self, request, pk):
         user = self.get_object(pk)

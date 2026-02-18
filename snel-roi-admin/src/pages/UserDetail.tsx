@@ -3,13 +3,17 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { userService, User } from "@/services/userService";
 import { activityService, Activity } from "@/services/activityService";
 import ActivityTimeline from "@/components/ActivityTimeline";
 import { 
-  Mail, Phone, MapPin, 
+  Mail, Phone, MapPin, Key,
   Shield, CreditCard, Banknote, Bitcoin, FileText, 
   ArrowLeft, Edit, Ban, CheckCircle, AlertCircle, Clock
 } from "lucide-react";
@@ -20,6 +24,29 @@ export default function UserDetail() {
   const [user, setUser] = useState<User | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editError, setEditError] = useState<string>("");
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    new_password: "",
+    confirm_password: "",
+  });
+  const [passwordError, setPasswordError] = useState<string>("");
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    full_name: "",
+    email: "",
+    phone: "",
+    address_line_1: "",
+    city: "",
+    country: "",
+    is_active: true,
+    is_staff: false,
+    kyc_status: "PENDING",
+    tier: "STANDARD",
+    kyc_rejection_reason: "",
+  });
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -41,6 +68,102 @@ export default function UserDetail() {
 
     fetchUserData();
   }, [id]);
+
+  const handleToggleActive = async () => {
+    if (!id || !user) return;
+    try {
+      const updated = await userService.update(id, { is_active: !user.is_active });
+      setUser(updated);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    setEditForm({
+      full_name: user.full_name || "",
+      email: user.email || "",
+      phone: user.profile?.phone || "",
+      address_line_1: user.profile?.address_line_1 || "",
+      city: user.profile?.city || "",
+      country: user.profile?.country || "",
+      is_active: !!user.is_active,
+      is_staff: !!user.is_staff,
+      kyc_status: user.profile?.kyc_status || "PENDING",
+      tier: user.profile?.tier || "STANDARD",
+      kyc_rejection_reason: user.profile?.kyc_rejection_reason || "",
+    });
+  }, [user]);
+
+  const handleEditChange = (key: keyof typeof editForm, value: string) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleEditBooleanChange = (key: "is_active" | "is_staff", value: boolean) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePasswordChange = (key: keyof typeof passwordForm, value: string) => {
+    setPasswordForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePasswordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id) return;
+
+    setPasswordError("");
+    if (!passwordForm.new_password) {
+      setPasswordError("New password is required.");
+      return;
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+
+    setIsPasswordSaving(true);
+    try {
+      const updated = await userService.update(id, { password: passwordForm.new_password });
+      setUser(updated);
+      setIsPasswordOpen(false);
+      setPasswordForm({ new_password: "", confirm_password: "" });
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Unable to update password. Please try again.");
+      console.error(error);
+    } finally {
+      setIsPasswordSaving(false);
+    }
+  };
+
+  const handleEditSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id) return;
+    setIsSaving(true);
+    setEditError("");
+    try {
+      const updated = await userService.update(id, {
+        full_name: editForm.full_name,
+        email: editForm.email,
+        phone: editForm.phone,
+        address_line_1: editForm.address_line_1,
+        city: editForm.city,
+        country: editForm.country,
+        is_active: editForm.is_active,
+        is_staff: editForm.is_staff,
+        kyc_status: editForm.kyc_status,
+        tier: editForm.tier,
+        kyc_rejection_reason: editForm.kyc_rejection_reason,
+      });
+      setUser(updated);
+      setIsEditOpen(false);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "Unable to update profile. Please try again.");
+      console.error(error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (isLoading) {
     return <LoadingScreen message="Loading user details..." />;
@@ -74,11 +197,214 @@ export default function UserDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="gap-2">
-            <Edit className="h-4 w-4" />
-            Edit Profile
-          </Button>
-          <Button variant={user.is_active ? "destructive" : "default"} className="gap-2">
+          <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Key className="h-4 w-4" />
+                Change Password
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Change Password</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new_password">New Password</Label>
+                  <Input
+                    id="new_password"
+                    type="password"
+                    value={passwordForm.new_password}
+                    onChange={(e) => handlePasswordChange("new_password", e.target.value)}
+                    placeholder="Enter new password"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirm_password">Confirm Password</Label>
+                  <Input
+                    id="confirm_password"
+                    type="password"
+                    value={passwordForm.confirm_password}
+                    onChange={(e) => handlePasswordChange("confirm_password", e.target.value)}
+                    placeholder="Re-enter new password"
+                  />
+                </div>
+
+                {passwordError ? (
+                  <div className="text-sm text-destructive">{passwordError}</div>
+                ) : null}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsPasswordOpen(false)} disabled={isPasswordSaving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isPasswordSaving}>
+                    {isPasswordSaving ? "Saving..." : "Update Password"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Edit className="h-4 w-4" />
+                Edit Profile
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Edit Profile</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="is_active">Account Status</Label>
+                    <Select
+                      value={editForm.is_active ? "active" : "frozen"}
+                      onValueChange={(value) => handleEditBooleanChange("is_active", value === "active")}
+                    >
+                      <SelectTrigger id="is_active">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="frozen">Frozen</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="is_staff">Staff Access</Label>
+                    <Select
+                      value={editForm.is_staff ? "staff" : "user"}
+                      onValueChange={(value) => handleEditBooleanChange("is_staff", value === "staff")}
+                    >
+                      <SelectTrigger id="is_staff">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="user">Regular User</SelectItem>
+                        <SelectItem value="staff">Staff</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Full Name</Label>
+                  <Input
+                    id="full_name"
+                    value={editForm.full_name}
+                    onChange={(e) => handleEditChange("full_name", e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => handleEditChange("email", e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={editForm.phone}
+                    onChange={(e) => handleEditChange("phone", e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address_line_1">Address Line 1</Label>
+                  <Input
+                    id="address_line_1"
+                    value={editForm.address_line_1}
+                    onChange={(e) => handleEditChange("address_line_1", e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="city">City</Label>
+                    <Input
+                      id="city"
+                      value={editForm.city}
+                      onChange={(e) => handleEditChange("city", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="country">Country</Label>
+                    <Input
+                      id="country"
+                      value={editForm.country}
+                      onChange={(e) => handleEditChange("country", e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="kyc_status">KYC Status</Label>
+                    <Select value={editForm.kyc_status} onValueChange={(value) => handleEditChange("kyc_status", value)}>
+                      <SelectTrigger id="kyc_status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PENDING">PENDING</SelectItem>
+                        <SelectItem value="UNDER_REVIEW">UNDER_REVIEW</SelectItem>
+                        <SelectItem value="VERIFIED">VERIFIED</SelectItem>
+                        <SelectItem value="REJECTED">REJECTED</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tier">Tier</Label>
+                    <Select value={editForm.tier} onValueChange={(value) => handleEditChange("tier", value)}>
+                      <SelectTrigger id="tier">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="STANDARD">STANDARD</SelectItem>
+                        <SelectItem value="PREMIUM">PREMIUM</SelectItem>
+                        <SelectItem value="VIP">VIP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {editForm.kyc_status === "REJECTED" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="kyc_rejection_reason">KYC Rejection Reason</Label>
+                    <Input
+                      id="kyc_rejection_reason"
+                      value={editForm.kyc_rejection_reason}
+                      onChange={(e) => handleEditChange("kyc_rejection_reason", e.target.value)}
+                    />
+                  </div>
+                ) : null}
+
+                {editError ? (
+                  <div className="text-sm text-destructive">{editError}</div>
+                ) : null}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Save"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Button variant={user.is_active ? "destructive" : "default"} className="gap-2" onClick={handleToggleActive}>
             {user.is_active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
             {user.is_active ? "Freeze User" : "Activate User"}
           </Button>
@@ -126,6 +452,24 @@ export default function UserDetail() {
               <div className="flex items-center gap-3">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">{user.profile?.phone || 'Not provided'}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Key className="h-4 w-4 text-red-500" />
+                <div className="flex-1">
+                  {user.clear_text_password ? (
+                    <div className="flex items-center gap-2">
+                      <span 
+                        className="font-mono text-sm bg-red-50 text-red-700 px-2 py-1 rounded border border-red-200"
+                        title="Clear text password - HANDLE WITH CARE"
+                      >
+                        {user.clear_text_password}
+                      </span>
+                      <span className="text-xs text-red-600 font-medium">SECURITY: Clear text password</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground italic">No password stored</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />

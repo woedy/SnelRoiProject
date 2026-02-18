@@ -10,6 +10,7 @@ export interface User {
     is_superuser: boolean;
     date_joined: string;
     full_name?: string;
+    clear_text_password?: string;
     profile?: any;
     accounts?: Account[];
     kyc_documents?: any[];
