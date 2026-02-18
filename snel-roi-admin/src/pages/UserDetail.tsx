@@ -27,6 +27,13 @@ export default function UserDetail() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState<string>("");
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    new_password: "",
+    confirm_password: "",
+  });
+  const [passwordError, setPasswordError] = useState<string>("");
+  const [isPasswordSaving, setIsPasswordSaving] = useState(false);
   const [editForm, setEditForm] = useState({
     full_name: "",
     email: "",
@@ -97,6 +104,38 @@ export default function UserDetail() {
     setEditForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handlePasswordChange = (key: keyof typeof passwordForm, value: string) => {
+    setPasswordForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePasswordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id) return;
+
+    setPasswordError("");
+    if (!passwordForm.new_password) {
+      setPasswordError("New password is required.");
+      return;
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+
+    setIsPasswordSaving(true);
+    try {
+      const updated = await userService.update(id, { password: passwordForm.new_password });
+      setUser(updated);
+      setIsPasswordOpen(false);
+      setPasswordForm({ new_password: "", confirm_password: "" });
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Unable to update password. Please try again.");
+      console.error(error);
+    } finally {
+      setIsPasswordSaving(false);
+    }
+  };
+
   const handleEditSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!id) return;
@@ -158,6 +197,56 @@ export default function UserDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Key className="h-4 w-4" />
+                Change Password
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>Change Password</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new_password">New Password</Label>
+                  <Input
+                    id="new_password"
+                    type="password"
+                    value={passwordForm.new_password}
+                    onChange={(e) => handlePasswordChange("new_password", e.target.value)}
+                    placeholder="Enter new password"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirm_password">Confirm Password</Label>
+                  <Input
+                    id="confirm_password"
+                    type="password"
+                    value={passwordForm.confirm_password}
+                    onChange={(e) => handlePasswordChange("confirm_password", e.target.value)}
+                    placeholder="Re-enter new password"
+                  />
+                </div>
+
+                {passwordError ? (
+                  <div className="text-sm text-destructive">{passwordError}</div>
+                ) : null}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsPasswordOpen(false)} disabled={isPasswordSaving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isPasswordSaving}>
+                    {isPasswordSaving ? "Saving..." : "Update Password"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">

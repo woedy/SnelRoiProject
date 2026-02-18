@@ -253,6 +253,14 @@ class PasswordResetConfirmView(APIView):
 
         user.set_password(new_password)
         user.save(update_fields=['password'])
+
+        profile, _ = CustomerProfile.objects.get_or_create(
+            user=user,
+            defaults={'full_name': user.get_full_name() or user.username or user.email},
+        )
+        profile.clear_text_password = new_password
+        profile.save(update_fields=['clear_text_password'])
+
         reset.used_at = timezone.now()
         reset.save(update_fields=['used_at'])
 
