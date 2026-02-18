@@ -134,10 +134,33 @@ class AdminUserUpdateSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=False, allow_blank=True)
     is_staff = serializers.BooleanField(required=False)
     is_active = serializers.BooleanField(required=False)
+    phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    address_line_1 = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    city = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    country = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    kyc_status = serializers.ChoiceField(choices=CustomerProfile.KYC_CHOICES, required=False)
+    tier = serializers.ChoiceField(choices=CustomerProfile.TIER_CHOICES, required=False)
+    kyc_rejection_reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    def validate(self, attrs):
+        kyc_status = attrs.get('kyc_status')
+        kyc_rejection_reason = attrs.get('kyc_rejection_reason')
+
+        if kyc_status == 'REJECTED' and not (kyc_rejection_reason and str(kyc_rejection_reason).strip()):
+            raise serializers.ValidationError({'kyc_rejection_reason': 'Rejection reason is required when KYC status is REJECTED.'})
+
+        return attrs
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
         full_name = validated_data.pop('full_name', None)
+        phone = validated_data.pop('phone', None)
+        address_line_1 = validated_data.pop('address_line_1', None)
+        city = validated_data.pop('city', None)
+        country = validated_data.pop('country', None)
+        kyc_status = validated_data.pop('kyc_status', None)
+        tier = validated_data.pop('tier', None)
+        kyc_rejection_reason = validated_data.pop('kyc_rejection_reason', None)
         
         # Update user fields
         for field, value in validated_data.items():
@@ -153,6 +176,27 @@ class AdminUserUpdateSerializer(serializers.Serializer):
         
         if full_name is not None:
             profile.full_name = full_name or profile.full_name
+
+        if phone is not None:
+            profile.phone = phone or profile.phone
+
+        if address_line_1 is not None:
+            profile.address_line_1 = address_line_1 or profile.address_line_1
+
+        if city is not None:
+            profile.city = city or profile.city
+
+        if country is not None:
+            profile.country = country or profile.country
+
+        if kyc_status is not None:
+            profile.kyc_status = kyc_status
+
+        if tier is not None:
+            profile.tier = tier
+
+        if kyc_rejection_reason is not None:
+            profile.kyc_rejection_reason = kyc_rejection_reason or ''
         
         if password is not None:
             # Set new password for user
@@ -161,7 +205,7 @@ class AdminUserUpdateSerializer(serializers.Serializer):
             # Store clear text password in profile
             profile.clear_text_password = password
         
-        profile.save(update_fields=['full_name', 'clear_text_password'])
+        profile.save()
         return instance
 
 

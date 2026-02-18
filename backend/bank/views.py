@@ -643,6 +643,7 @@ class AdminUserDetailView(APIView):
         return Response(AdminUserDetailSerializer(user, context={'request': request}).data)
 
     def patch(self, request, pk):
+        from .serializers import AdminUserDetailSerializer
         user = self.get_object(pk)
         serializer = AdminUserUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
