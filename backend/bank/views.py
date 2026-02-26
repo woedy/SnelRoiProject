@@ -18,7 +18,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, TelegramConfig, WithdrawalAttempt, OutgoingEmail
+from .models import Account, CustomerProfile, LedgerEntry, LedgerPosting, Statement, VerificationCode, CryptoWallet, CryptoDeposit, CryptoInvestmentPlan, CryptoInvestment, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, TelegramConfig, WithdrawalAttempt, OutgoingEmail
 from .serializers import (
     AccountSerializer,
     AdminAccountSerializer,
@@ -42,6 +42,9 @@ from .serializers import (
     CryptoDepositCreateSerializer,
     CryptoDepositProofUploadSerializer,
     CryptoDepositVerificationSerializer,
+    CryptoInvestmentPlanSerializer,
+    CryptoInvestmentSerializer,
+    CryptoInvestmentCreateSerializer,
     SupportConversationSerializer,
     SupportConversationListSerializer,
     SupportMessageSerializer,
@@ -929,6 +932,109 @@ class UserCryptoDepositsView(APIView):
         return Response(serializer.data)
 
 
+class CryptoInvestmentPlansView(APIView):
+    """List active crypto investment plans for customers."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        plans = CryptoInvestmentPlan.objects.filter(is_active=True)
+        serializer = CryptoInvestmentPlanSerializer(plans, many=True)
+        return Response(serializer.data)
+
+
+class UserCryptoInvestmentsView(APIView):
+    """List customer crypto investments."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        investments = CryptoInvestment.objects.filter(customer=request.user.profile)
+        serializer = CryptoInvestmentSerializer(investments, many=True)
+        return Response(serializer.data)
+
+
+class CryptoInvestmentCreateView(APIView):
+    """Create an investment request funded through crypto payment proof."""
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        serializer = CryptoInvestmentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        profile = request.user.profile
+        plan = serializer.validated_data['plan']
+        wallet = serializer.validated_data['wallet']
+        amount_usd = serializer.validated_data['amount_usd']
+
+        crypto_deposit = CryptoDeposit.objects.create(
+            customer=profile,
+            crypto_wallet=wallet,
+            amount_usd=amount_usd,
+            proof_of_payment=serializer.validated_data['proof_of_payment'],
+            tx_hash=serializer.validated_data.get('tx_hash', ''),
+            verification_status='PENDING_VERIFICATION',
+            purpose='INVESTMENT',
+            expires_at=timezone.now() + timedelta(minutes=30),
+        )
+
+        expected_return = (amount_usd * plan.expected_return_percent) / Decimal('100')
+        investment = CryptoInvestment.objects.create(
+            customer=profile,
+            plan=plan,
+            amount_usd=amount_usd,
+            expected_return_amount=expected_return,
+            status='PENDING_PAYMENT',
+            funded_deposit=crypto_deposit,
+        )
+
+        return Response(CryptoInvestmentSerializer(investment).data, status=status.HTTP_201_CREATED)
+
+
+class AdminCryptoInvestmentPlansView(APIView):
+    """Admin endpoint to list and create investment plans."""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        plans = CryptoInvestmentPlan.objects.all()
+        serializer = CryptoInvestmentPlanSerializer(plans, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = CryptoInvestmentPlanSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        plan = serializer.save()
+        return Response(CryptoInvestmentPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
+
+
+class AdminCryptoInvestmentPlanDetailView(APIView):
+    """Admin endpoint to update/delete investment plans."""
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, pk):
+        try:
+            return CryptoInvestmentPlan.objects.get(pk=pk)
+        except CryptoInvestmentPlan.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        plan = self.get_object(pk)
+        if not plan:
+            return Response({'detail': 'Plan not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CryptoInvestmentPlanSerializer(plan, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, pk):
+        plan = self.get_object(pk)
+        if not plan:
+            return Response({'detail': 'Plan not found'}, status=status.HTTP_404_NOT_FOUND)
+        plan.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+
+
 # ============ Admin Crypto Views ============
 
 class AdminCryptoWalletsView(APIView):
@@ -1049,35 +1155,41 @@ class AdminCryptoDepositVerifyView(APIView):
                 add_posting(entry, account, 'CREDIT', crypto_deposit.amount_usd, f'Crypto deposit ({crypto_deposit.crypto_wallet.crypto_type})')
                 add_posting(entry, funding, 'DEBIT', crypto_deposit.amount_usd, 'Crypto funding')
                 approve_entry(entry, request.user)
-                
+
                 # 2. Debit User Account (Fee) -> Credit System Revenue (Funding for now, or dedicated revenue account)
                 # Using funding account as revenue destination for simplicity
                 fee_entry = create_entry('WITHDRAWAL', request.user, memo=f'Virtual Card Fee - {crypto_deposit.related_virtual_card.card_type}')
                 add_posting(fee_entry, account, 'DEBIT', crypto_deposit.amount_usd, f'Virtual Card Fee')
                 add_posting(fee_entry, funding, 'CREDIT', crypto_deposit.amount_usd, 'Virtual Card Revenue')
                 approve_entry(fee_entry, request.user)
-                
+
                 # 3. Activate Virtual Card
                 card = crypto_deposit.related_virtual_card
                 card.status = 'ACTIVE'
                 card.approved_by = request.user
                 card.approved_at = timezone.now()
                 card.save(update_fields=['status', 'approved_by', 'approved_at'])
-                
+
                 # Notify User about Card Activation
                 from .services import create_virtual_card_notification
                 create_virtual_card_notification(crypto_deposit.customer, 'ACTIVE', card.last_four)
 
             else:
-                # Standard Deposit Logic
+                # Standard Deposit Logic (including investment funding)
                 entry = create_entry('DEPOSIT', request.user, memo=f'Crypto deposit - {crypto_deposit.crypto_wallet.crypto_type}')
                 add_posting(entry, account, 'CREDIT', crypto_deposit.amount_usd, f'Crypto deposit ({crypto_deposit.crypto_wallet.crypto_type})')
                 add_posting(entry, funding, 'DEBIT', crypto_deposit.amount_usd, 'Crypto funding')
-                # Approve the entry immediately
                 approve_entry(entry, request.user)
-                
-                # Update crypto deposit
                 crypto_deposit.ledger_entry = entry
+
+                if crypto_deposit.purpose == 'INVESTMENT':
+                    investment = getattr(crypto_deposit, 'crypto_investment', None)
+                    if investment:
+                        investment.status = 'ACTIVE'
+                        investment.starts_at = timezone.now()
+                        investment.matures_at = timezone.now() + timedelta(days=investment.plan.duration_days)
+                        investment.admin_notes = admin_notes
+                        investment.save(update_fields=['status', 'starts_at', 'matures_at', 'admin_notes', 'updated_at'])
             crypto_deposit.verification_status = 'APPROVED'
             crypto_deposit.verified_by = request.user
             crypto_deposit.verified_at = timezone.now()
@@ -1094,6 +1206,13 @@ class AdminCryptoDepositVerifyView(APIView):
             crypto_deposit.verified_at = timezone.now()
             crypto_deposit.admin_notes = admin_notes
             crypto_deposit.save()
+
+            if crypto_deposit.purpose == 'INVESTMENT':
+                investment = getattr(crypto_deposit, 'crypto_investment', None)
+                if investment:
+                    investment.status = 'REJECTED'
+                    investment.admin_notes = admin_notes
+                    investment.save(update_fields=['status', 'admin_notes', 'updated_at'])
 
             # Notify user
             from .emails import send_crypto_rejection_email

@@ -27,6 +27,7 @@ import {
   Banknote,
   Receipt,
   Award,
+  TrendingUp,
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -63,6 +64,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         { path: '/app/loans', icon: Banknote, label: t('nav.loans') },
         { path: '/app/grants', icon: Award, label: t('nav.grants') },
         { path: '/app/tax-refund', icon: Receipt, label: t('nav.taxRefund') },
+        { path: '/app/crypto-investments', icon: TrendingUp, label: 'Crypto Investments' },
         { path: '/app/virtual-cards', icon: CreditCard, label: t('nav.virtualCards') },
       ]
     },

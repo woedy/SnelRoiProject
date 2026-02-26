@@ -32,6 +32,9 @@ urlpatterns = [
     path('deposits/crypto/initiate/', views.CryptoDepositInitiateView.as_view()),
     path('deposits/crypto/<int:pk>/upload-proof/', views.CryptoDepositUploadProofView.as_view()),
     path('deposits/crypto/<int:pk>/status/', views.CryptoDepositStatusView.as_view()),
+    path('investments/crypto/plans/', views.CryptoInvestmentPlansView.as_view()),
+    path('investments/crypto/', views.UserCryptoInvestmentsView.as_view()),
+    path('investments/crypto/create/', views.CryptoInvestmentCreateView.as_view()),
 
     # Admin Crypto Endpoints
     path('admin/crypto-wallets/', views.AdminCryptoWalletsView.as_view()),
@@ -39,6 +42,8 @@ urlpatterns = [
     path('admin/crypto-wallets/<int:pk>/toggle/', views.AdminCryptoWalletToggleView.as_view()),
     path('admin/crypto-deposits/', views.AdminCryptoDepositsView.as_view()),
     path('admin/crypto-deposits/<int:pk>/verify/', views.AdminCryptoDepositVerifyView.as_view()),
+    path('admin/crypto-investment-plans/', views.AdminCryptoInvestmentPlansView.as_view()),
+    path('admin/crypto-investment-plans/<int:pk>/', views.AdminCryptoInvestmentPlanDetailView.as_view()),
 
     path('admin/transactions/', views.AdminTransactionsView.as_view()),
     path('admin/transactions/clear/', views.AdminClearTransactionsView.as_view()),
