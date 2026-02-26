@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, TelegramConfig, WithdrawalAttempt, OutgoingEmail, OutgoingEmailAttachment
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, CryptoInvestmentPlan, CryptoInvestment, SupportConversation, SupportMessage, TelegramConfig, WithdrawalAttempt, OutgoingEmail, OutgoingEmailAttachment
 
 @admin.register(CustomerProfile)
 class CustomerProfileAdmin(admin.ModelAdmin):
@@ -81,6 +81,22 @@ class CryptoDepositAdmin(admin.ModelAdmin):
     list_display = ['id', 'customer', 'crypto_wallet', 'amount_usd', 'verification_status', 'created_at']
     list_filter = ['verification_status', 'crypto_wallet__crypto_type']
     search_fields = ['customer__user__email', 'tx_hash']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+
+@admin.register(CryptoInvestmentPlan)
+class CryptoInvestmentPlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'minimum_amount_usd', 'expected_return_percent', 'duration_days', 'risk_level', 'is_active']
+    list_filter = ['risk_level', 'is_active']
+    search_fields = ['name']
+
+
+@admin.register(CryptoInvestment)
+class CryptoInvestmentAdmin(admin.ModelAdmin):
+    list_display = ['id', 'customer', 'plan', 'amount_usd', 'expected_return_amount', 'status', 'created_at']
+    list_filter = ['status', 'plan']
+    search_fields = ['customer__user__email', 'plan__name']
     readonly_fields = ['created_at', 'updated_at']
 
 @admin.register(SupportConversation)

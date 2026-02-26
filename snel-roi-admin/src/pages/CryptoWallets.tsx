@@ -23,17 +23,18 @@ import {
   XCircle,
   ExternalLink
 } from "lucide-react";
-import { cryptoService, CryptoWallet, CryptoDeposit } from "@/services/cryptoService";
+import { cryptoService, CryptoWallet, CryptoDeposit, CryptoInvestmentPlan } from "@/services/cryptoService";
 
 export default function CryptoWallets() {
   const [wallets, setWallets] = useState<CryptoWallet[]>([]);
   const [deposits, setDeposits] = useState<CryptoDeposit[]>([]);
+  const [plans, setPlans] = useState<CryptoInvestmentPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showWalletForm, setShowWalletForm] = useState(false);
   const [editingWallet, setEditingWallet] = useState<CryptoWallet | null>(null);
   const [verificationNotes, setVerificationNotes] = useState("");
-  const [activeTab, setActiveTab] = useState<"deposits" | "wallets">("deposits");
+  const [activeTab, setActiveTab] = useState<"deposits" | "wallets" | "plans">("deposits");
   
   const [walletForm, setWalletForm] = useState({
     crypto_type: "BTC",
@@ -44,16 +45,35 @@ export default function CryptoWallets() {
     is_active: true
   });
   const [walletQrFile, setWalletQrFile] = useState<File | null>(null);
+  const [planForm, setPlanForm] = useState<{
+    name: string;
+    description: string;
+    minimum_amount_usd: string;
+    expected_return_percent: string;
+    duration_days: string;
+    risk_level: "LOW" | "MEDIUM" | "HIGH";
+    is_active: boolean;
+  }>({
+    name: "",
+    description: "",
+    minimum_amount_usd: "100",
+    expected_return_percent: "8",
+    duration_days: "30",
+    risk_level: "MEDIUM",
+    is_active: true,
+  });
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [walletData, depositData] = await Promise.all([
+      const [walletData, depositData, planData] = await Promise.all([
         cryptoService.getWallets(),
-        cryptoService.getDeposits() // Fetch all for tracking history
+        cryptoService.getDeposits(),
+        cryptoService.getInvestmentPlans(),
       ]);
       setWallets(walletData);
       setDeposits(depositData);
+      setPlans(planData);
     } catch (error) {
       console.error("Failed to fetch data", error);
     } finally {
@@ -137,6 +157,34 @@ export default function CryptoWallets() {
     }
   };
 
+  const handleCreatePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await cryptoService.createInvestmentPlan({
+        ...planForm,
+        minimum_amount_usd: planForm.minimum_amount_usd,
+        expected_return_percent: planForm.expected_return_percent,
+        duration_days: Number(planForm.duration_days),
+      });
+      setPlanForm({
+        name: "",
+        description: "",
+        minimum_amount_usd: "100",
+        expected_return_percent: "8",
+        duration_days: "30",
+        risk_level: "MEDIUM",
+        is_active: true,
+      });
+      fetchData();
+      alert('Investment plan created.');
+    } catch (error: any) {
+      alert(error.message || 'Failed to create investment plan');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED': return 'text-green-600 bg-green-50 border-green-200';
@@ -164,13 +212,19 @@ export default function CryptoWallets() {
           onClick={() => setActiveTab("deposits")}
           className={`pb-2 px-4 transition-all ${activeTab === "deposits" ? "border-b-2 border-primary font-bold text-primary" : "text-muted-foreground"}`}
         >
-          Pending Deposits ({deposits.length})
+          Crypto Payment Verifications ({deposits.length})
         </button>
         <button 
           onClick={() => setActiveTab("wallets")}
           className={`pb-2 px-4 transition-all ${activeTab === "wallets" ? "border-b-2 border-primary font-bold text-primary" : "text-muted-foreground"}`}
         >
           Wallet Configuration ({wallets.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab("plans")}
+          className={`pb-2 px-4 transition-all ${activeTab === "plans" ? "border-b-2 border-primary font-bold text-primary" : "text-muted-foreground"}`}
+        >
+          Investment Plans ({plans.length})
         </button>
       </div>
 
@@ -182,7 +236,7 @@ export default function CryptoWallets() {
                 <div className="mx-auto w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4">
                   <CheckCircle2 className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-medium">No pending deposits</h3>
+                <h3 className="text-lg font-medium">No pending crypto payments</h3>
                 <p className="text-muted-foreground">All crypto deposits have been processed.</p>
               </CardContent>
             </Card>
@@ -202,6 +256,11 @@ export default function CryptoWallets() {
                           {deposit.purpose === 'VIRTUAL_CARD' && (
                             <div className="text-[10px] px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 font-bold uppercase">
                               Virtual Card
+                            </div>
+                          )}
+                          {deposit.purpose === 'INVESTMENT' && (
+                            <div className="text-[10px] px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 font-bold uppercase">
+                              Investment
                             </div>
                           )}
                           <div className={`text-[10px] px-2 py-0.5 rounded-full border inline-block font-bold uppercase ${getStatusColor(deposit.verification_status)}`}>
@@ -294,6 +353,76 @@ export default function CryptoWallets() {
           )}
         </div>
       )}
+
+
+      {activeTab === "plans" && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create Investment Plan</CardTitle>
+              <CardDescription>Simple plan setup for crypto investment subscriptions.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreatePlan}>
+                <div className="space-y-2">
+                  <Label>Plan Name</Label>
+                  <Input value={planForm.name} onChange={(e) => setPlanForm(prev => ({ ...prev, name: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Minimum Amount (USD)</Label>
+                  <Input type="number" value={planForm.minimum_amount_usd} onChange={(e) => setPlanForm(prev => ({ ...prev, minimum_amount_usd: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expected Return %</Label>
+                  <Input type="number" value={planForm.expected_return_percent} onChange={(e) => setPlanForm(prev => ({ ...prev, expected_return_percent: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Duration (days)</Label>
+                  <Input type="number" value={planForm.duration_days} onChange={(e) => setPlanForm(prev => ({ ...prev, duration_days: e.target.value }))} required />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Description</Label>
+                  <Input value={planForm.description} onChange={(e) => setPlanForm(prev => ({ ...prev, description: e.target.value }))} />
+                </div>
+                <div className="md:col-span-2">
+                  <Button type="submit" disabled={isSubmitting}>Create Plan</Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Existing Plans</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Min USD</TableHead>
+                    <TableHead>Return %</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {plans.map((plan) => (
+                    <TableRow key={plan.id}>
+                      <TableCell>{plan.name}</TableCell>
+                      <TableCell>${plan.minimum_amount_usd}</TableCell>
+                      <TableCell>{plan.expected_return_percent}%</TableCell>
+                      <TableCell>{plan.duration_days} days</TableCell>
+                      <TableCell>{plan.is_active ? 'Active' : 'Inactive'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
 
       {activeTab === "wallets" && (
         <div className="space-y-6">

@@ -61,6 +61,7 @@ import LoanApplication from "./pages/app/LoanApplication";
 import LoanDetail from "./pages/app/LoanDetail";
 import Grants from "./pages/app/Grants";
 import TaxRefund from "./pages/app/TaxRefund";
+import CryptoInvestments from "./pages/app/CryptoInvestments";
 
 const queryClient = new QueryClient();
 
@@ -135,6 +136,7 @@ const AppRoutes = () => {
       <Route path="/app/loans/:id" element={<AppLayout><LoanDetail /></AppLayout>} />
       <Route path="/app/grants" element={<AppLayout><Grants /></AppLayout>} />
       <Route path="/app/tax-refund" element={<AppLayout><TaxRefund /></AppLayout>} />
+      <Route path="/app/crypto-investments" element={<AppLayout><CryptoInvestments /></AppLayout>} />
       <Route path="/app/virtual-cards" element={<AppLayout><VirtualCards /></AppLayout>} />
       <Route path="/app/statements" element={<AppLayout><Statements /></AppLayout>} />
       <Route path="/app/transactions" element={<AppLayout><Transactions /></AppLayout>} />

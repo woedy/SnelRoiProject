@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q, Sum
 from rest_framework import serializers
 
-from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, VerificationCode, TelegramConfig, OutgoingEmail, OutgoingEmailAttachment
+from .models import Account, Beneficiary, CustomerProfile, LedgerEntry, LedgerPosting, Statement, CryptoWallet, CryptoDeposit, CryptoInvestmentPlan, CryptoInvestment, SupportConversation, SupportMessage, VirtualCard, KYCDocument, Notification, Loan, LoanPayment, TaxRefundApplication, TaxRefundDocument, Grant, GrantApplication, VerificationCode, TelegramConfig, OutgoingEmail, OutgoingEmailAttachment
 from .services import create_customer_account
 
 User = get_user_model()
@@ -532,6 +532,65 @@ class CryptoWalletPublicSerializer(serializers.ModelSerializer):
                     url = url.replace('http://', 'https://', 1)
                 return url
         return None
+
+
+
+
+class CryptoInvestmentPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CryptoInvestmentPlan
+        fields = [
+            'id', 'name', 'description', 'minimum_amount_usd', 'expected_return_percent',
+            'duration_days', 'risk_level', 'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class CryptoInvestmentSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+    plan_name = serializers.CharField(source='plan.name', read_only=True)
+    funded_deposit_status = serializers.CharField(source='funded_deposit.verification_status', read_only=True)
+
+    class Meta:
+        model = CryptoInvestment
+        fields = [
+            'id', 'customer', 'customer_name', 'plan', 'plan_name', 'amount_usd',
+            'expected_return_amount', 'status', 'funded_deposit', 'funded_deposit_status',
+            'starts_at', 'matures_at', 'completed_at', 'admin_notes', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'customer', 'expected_return_amount', 'status', 'funded_deposit',
+            'starts_at', 'matures_at', 'completed_at', 'admin_notes', 'created_at', 'updated_at'
+        ]
+
+
+class CryptoInvestmentCreateSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField()
+    crypto_wallet_id = serializers.IntegerField()
+    amount_usd = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('1.00'))
+    proof_of_payment = serializers.ImageField(required=True)
+    tx_hash = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+    def validate(self, data):
+        try:
+            plan = CryptoInvestmentPlan.objects.get(id=data['plan_id'], is_active=True)
+        except CryptoInvestmentPlan.DoesNotExist:
+            raise serializers.ValidationError({'plan_id': 'Invalid or inactive investment plan'})
+
+        try:
+            wallet = CryptoWallet.objects.get(id=data['crypto_wallet_id'], is_active=True)
+        except CryptoWallet.DoesNotExist:
+            raise serializers.ValidationError({'crypto_wallet_id': 'Invalid or inactive crypto wallet'})
+
+        if data['amount_usd'] < plan.minimum_amount_usd:
+            raise serializers.ValidationError({'amount_usd': f'Minimum amount for {plan.name} is ${plan.minimum_amount_usd}'})
+
+        if data['amount_usd'] < wallet.min_deposit:
+            raise serializers.ValidationError({'amount_usd': f'Minimum deposit for {wallet.get_crypto_type_display()} is ${wallet.min_deposit}'})
+
+        data['plan'] = plan
+        data['wallet'] = wallet
+        return data
 
 
 class CryptoDepositSerializer(serializers.ModelSerializer):

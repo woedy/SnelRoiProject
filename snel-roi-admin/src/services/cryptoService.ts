@@ -28,8 +28,21 @@ export interface CryptoDeposit {
     verification_status: string;
     verification_status_display: string;
     admin_notes: string;
-    purpose: 'DEPOSIT' | 'VIRTUAL_CARD';
+    purpose: 'DEPOSIT' | 'VIRTUAL_CARD' | 'INVESTMENT';
     created_at: string;
+}
+
+
+
+export interface CryptoInvestmentPlan {
+    id: number;
+    name: string;
+    description: string;
+    minimum_amount_usd: string;
+    expected_return_percent: string;
+    duration_days: number;
+    risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+    is_active: boolean;
 }
 
 export const cryptoService = {
@@ -60,5 +73,17 @@ export const cryptoService = {
         apiRequest<CryptoDeposit>(`/admin/crypto-deposits/${id}/verify/`, {
             method: "POST",
             body: JSON.stringify({ action, admin_notes: notes })
+        }),
+
+    getInvestmentPlans: () => apiRequest<CryptoInvestmentPlan[]>('/admin/crypto-investment-plans/'),
+    createInvestmentPlan: (data: Partial<CryptoInvestmentPlan>) =>
+        apiRequest<CryptoInvestmentPlan>('/admin/crypto-investment-plans/', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    updateInvestmentPlan: (id: number, data: Partial<CryptoInvestmentPlan>) =>
+        apiRequest<CryptoInvestmentPlan>(`/admin/crypto-investment-plans/${id}/`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
         })
 };

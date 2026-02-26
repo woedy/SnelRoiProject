@@ -467,6 +467,7 @@ class CryptoDeposit(models.Model):
     PURPOSE_CHOICES = [
         ('DEPOSIT', 'Wallet Deposit'),
         ('VIRTUAL_CARD', 'Virtual Card Fee'),
+        ('INVESTMENT', 'Crypto Investment'),
     ]
 
     # Link to ledger entry
@@ -528,6 +529,66 @@ class CryptoDeposit(models.Model):
 
     def __str__(self):
         return f"{self.customer.full_name} - {self.crypto_wallet.crypto_type} ${self.amount_usd}"
+
+
+class CryptoInvestmentPlan(models.Model):
+    """Configurable investment plans that can be funded through crypto."""
+    RISK_LEVEL_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+    ]
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    minimum_amount_usd = models.DecimalField(max_digits=12, decimal_places=2, default=100.00)
+    expected_return_percent = models.DecimalField(max_digits=5, decimal_places=2, default=5.00)
+    duration_days = models.PositiveIntegerField(default=30)
+    risk_level = models.CharField(max_length=10, choices=RISK_LEVEL_CHOICES, default='MEDIUM')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class CryptoInvestment(models.Model):
+    """Customer investment record funded via crypto payment."""
+    STATUS_CHOICES = [
+        ('PENDING_PAYMENT', 'Pending Payment Verification'),
+        ('ACTIVE', 'Active'),
+        ('REJECTED', 'Rejected'),
+        ('COMPLETED', 'Completed'),
+    ]
+
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='crypto_investments')
+    plan = models.ForeignKey(CryptoInvestmentPlan, on_delete=models.PROTECT, related_name='investments')
+    amount_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    expected_return_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING_PAYMENT')
+    funded_deposit = models.OneToOneField(
+        CryptoDeposit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='crypto_investment'
+    )
+    starts_at = models.DateTimeField(null=True, blank=True)
+    matures_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    admin_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.customer.full_name} - {self.plan.name} (${self.amount_usd})"
 
 
 class SupportConversation(models.Model):
